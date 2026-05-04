@@ -303,6 +303,7 @@ function detectIntent(text) {
   const source = normalize(text);
   if (includesAny(source, ['удали', 'удалить', 'очисти', 'сотри', 'стереть'])) return 'delete';
   if (includesAny(source, ['поделись', 'поделиться', 'отправь', 'скинь'])) return 'share';
+  if (includesAny(source, ['прочитай', 'зачитай', 'озвучь'])) return 'read';
   if (includesAny(source, ['позвони', 'набери'])) return 'call';
   if (includesAny(source, ['напиши', 'смс', 'sms', 'whatsapp', 'ватсап', 'вацап'])) return 'message';
   if (includesAny(source, ['покажи послед', 'выведи послед', 'последнюю заметку', 'что я только что записал'])) return 'show_latest';
@@ -335,6 +336,11 @@ function searchNotes(notes, query) {
     .filter(x => x.score > 0)
     .sort((a, b) => b.score - a.score || new Date(b.note.createdAt) - new Date(a.note.createdAt))
     .map(x => x.note);
+}
+
+function findFolderByText(folders, text) {
+  const source = normalize(text);
+  return folders.find(folder => source.includes(normalize(folder.name))) || null;
 }
 
 function shareText(note) {
@@ -375,6 +381,11 @@ function localAIPlan(text, data, currentNote) {
   }
 
   if (intent === 'share') return { action: 'share_current', target: 'current' };
+  if (intent === 'read') {
+    const folderMatch = findFolderByText(data.folders, text);
+    if (folderMatch) return { action: 'read_folder_latest', folder: folderMatch.name, target: 'folder' };
+    return { action: 'read_current', target: 'current' };
+  }
   if (intent === 'call') return { action: 'call_contact', query: text, target: includesAny(source, ['ему', 'ей', 'этому']) ? 'current' : 'specific' };
   if (intent === 'message') return { action: 'message_contact', query: text, target: includesAny(source, ['ему', 'ей', 'этому']) ? 'current' : 'specific' };
   if (intent === 'show_latest') return { action: 'show_latest_note', query: text, target: 'latest' };
@@ -654,6 +665,18 @@ export default function App() {
     }
     if (plan.action === 'share_current') { selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.'); return true; }
     if (plan.action === 'read_current') { selectedNote ? speak(shareText(selectedNote)) : setStatusVoice('Сначала откройте запись.'); return true; }
+    if (plan.action === 'read_folder_latest') {
+      const latestInFolder = [...data.notes]
+        .filter(note => note.folder === plan.folder)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      if (!latestInFolder) setStatusVoice(`В папке ${plan.folder || 'этой'} пока нет записей.`);
+      else {
+        openNote(latestInFolder);
+        speak(shareText(latestInFolder));
+        setStatusVoice(`Читаю последнюю запись из папки ${plan.folder}.`);
+      }
+      return true;
+    }
     if (plan.action === 'call_contact' || plan.action === 'message_contact') {
       const found = searchNotes(data.notes.filter(n => n.type === 'contact'), plan.query || originalText)[0] || selectedNote;
       if (found?.type !== 'contact') setStatusVoice('Не нашёл контакт.');
@@ -687,6 +710,19 @@ export default function App() {
     if (intent === 'show_latest') return showLatest(spoken);
     if (intent === 'delete') return handleDelete(spoken);
     if (intent === 'share') return selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
+    if (intent === 'read') {
+      const folderMatch = findFolderByText(data.folders, spoken);
+      if (folderMatch) {
+        const latestInFolder = [...data.notes]
+          .filter(note => note.folder === folderMatch.name)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
+        openNote(latestInFolder);
+        speak(shareText(latestInFolder));
+        return setStatusVoice(`Читаю последнюю запись из папки ${folderMatch.name}.`);
+      }
+      return selectedNote ? speak(shareText(selectedNote)) : setStatusVoice('Сначала откройте запись.');
+    }
     if (intent === 'call') {
       const found = searchNotes(data.notes.filter(n => n.type === 'contact'), spoken)[0] || selectedNote;
       return found?.type === 'contact' ? callNote(found) : setStatusVoice('Не нашёл контакт для звонка.');
