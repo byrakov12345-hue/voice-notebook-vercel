@@ -42,3 +42,11 @@ OPENAI_API_KEY не нужен.
 ## Как обновлять
 
 После изменений загружайте новые файлы в тот же GitHub-репозиторий. Vercel автоматически сделает новый deploy. После этого на телефоне достаточно обновить страницу.
+
+## Работа через ChatGPT на телефоне
+
+Ссылка на репозиторий:
+
+`https://github.com/byrakov12345-hue/voice-notebook-vercel`
+
+Короткая инструкция для такой схемы лежит в файле [CHATGPT_GITHUB_WORKFLOW.md](./CHATGPT_GITHUB_WORKFLOW.md).
