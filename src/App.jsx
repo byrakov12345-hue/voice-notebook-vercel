@@ -36,12 +36,49 @@ function capitalize(text) {
   return value ? value[0].toUpperCase() + value.slice(1) : value;
 }
 
+function prepareSpeechText(text) {
+  const replacements = [
+    [/\bсмс\b/gi, 'эс эм эс'],
+    [/\bsms\b/gi, 'эс эм эс'],
+    [/\bwhatsapp\b/gi, 'ватсап'],
+    [/\bapi\b/gi, 'эй пи ай'],
+    [/\bjson\b/gi, 'джейсон'],
+    [/\burl\b/gi, 'ю ар эл'],
+    [/\bid\b/gi, 'ай ди'],
+    [/\bкоды и комбинации\b/gi, 'коды и комбинации'],
+    [/\bконтакты\b/gi, 'контакты'],
+    [/\bвстречи\b/gi, 'встречи'],
+    [/\bпокупки\b/gi, 'покупки'],
+    [/\bзадачи\b/gi, 'задачи'],
+    [/\bмашина\b/gi, 'машина'],
+    [/\bучёба\b/gi, 'учёба'],
+    [/\bее\b/g, 'её'],
+    [/\bЁ\b/g, 'Ё']
+  ];
+
+  let value = String(text || '');
+  for (const [pattern, replacement] of replacements) {
+    value = value.replace(pattern, replacement);
+  }
+
+  return value
+    .replace(/\n+/g, '. ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/,\s*/g, ', ')
+    .replace(/:\s*/g, ': ')
+    .trim();
+}
+
 function speak(text) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const msg = new SpeechSynthesisUtterance(text);
+  const msg = new SpeechSynthesisUtterance(prepareSpeechText(text));
   msg.lang = 'ru-RU';
-  msg.rate = 0.95;
+  const voices = window.speechSynthesis.getVoices?.() || [];
+  const ruVoice = voices.find(voice => /^ru(-|_)?/i.test(voice.lang)) || voices.find(voice => /russian|рус/i.test(voice.name));
+  if (ruVoice) msg.voice = ruVoice;
+  msg.rate = 0.92;
+  msg.pitch = 1;
   window.speechSynthesis.speak(msg);
 }
 
