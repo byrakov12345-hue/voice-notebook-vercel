@@ -149,7 +149,7 @@ function extractAppointmentDateLabel(text) {
 
 function cleanTitle(text, fallback = 'Заметка') {
   const value = String(text || '')
-    .replace(/^(запомни|запиши|сохрани|добавь|создай|нужно|надо|мне)\s*/i, '')
+    .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|нужно|надо|мне|хочу)\s*/i, '')
     .replace(/^(у меня идея|есть идея|идея|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
     .replace(/\s+и\s+(покажи|выведи|открой|прочитай).*$/i, '')
     .trim();
@@ -310,6 +310,8 @@ function detectIntent(text) {
   if (includesAny(source, ['создай папку', 'создать папку'])) return 'create_folder';
   if (includesAny(source, ['запомни', 'запиши', 'сохрани', 'добавь', 'нужно запомнить', 'надо запомнить'])) return 'save';
   if (includesAny(source, ['у меня идея', 'есть идея'])) return 'save';
+  if (includesAny(source, ['мне нужно', 'мне надо', 'надо', 'нужно', 'хочу'])) return 'save';
+  if (inferType(text) !== 'note') return 'save';
   if (hasDateOrTime(source) || includesAny(source, ['на стрижку', 'к врачу', 'на прием', 'на приём', 'встреча'])) return 'save';
   return 'unknown';
 }
@@ -345,7 +347,7 @@ function shareText(note) {
 
 function stripSaveWords(text) {
   return String(text || '')
-    .replace(/^(запомни|запиши|сохрани|добавь|создай|мне|у меня|есть)\s*/i, '')
+    .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|мне|у меня|есть|нужно|надо|хочу)\s*/i, '')
     .replace(/^(идея|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
     .replace(/\s+и\s+(покажи|выведи|открой|прочитай).*$/i, '')
     .trim();
