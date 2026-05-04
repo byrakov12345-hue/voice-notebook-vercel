@@ -814,6 +814,21 @@ export default function App() {
             const count = data.notes.filter(n => n.folder === folder.name).length;
             return <button key={folder.id} className={selectedFolder === folder.name ? 'folder active' : 'folder'} onClick={() => setSelectedFolder(folder.name)}>{folder.name}<span>{count}</span></button>;
           })}
+          <div className="folder-tools">
+            <button
+              disabled={selectedFolder === 'Все' || !data.notes.some(n => n.folder === selectedFolder)}
+              onClick={() => requestDeleteFolder(selectedFolder)}
+            >
+              Очистить папку
+            </button>
+            <button
+              className="danger"
+              disabled={!data.notes.length}
+              onClick={requestDeleteAll}
+            >
+              Очистить блокнот
+            </button>
+          </div>
           <div className="trash-box">
             <b>Корзина</b>
             <p>{data.trash.length} записей</p>
