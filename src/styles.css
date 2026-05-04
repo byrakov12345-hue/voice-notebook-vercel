@@ -24,7 +24,7 @@ button.primary { background: #f8fafc; color: #020617; font-weight: 800; }
 button.danger { background: #dc2626; color: #fff; }
 button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 
-.status-grid { display: grid; grid-template-columns: 1.7fr .8fr 1.5fr; gap: 14px; margin: 18px 0; }
+.status-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px; margin: 18px 0; }
 .status-card, .manual { min-height: 86px; padding: 16px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); background: rgba(15,23,42,0.78); }
 .status-card span { display: block; text-transform: uppercase; letter-spacing: .12em; color: #94a3b8; font-size: 12px; margin-bottom: 8px; }
 .status-card strong { display: block; font-size: 18px; }

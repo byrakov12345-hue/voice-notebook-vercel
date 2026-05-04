@@ -194,7 +194,7 @@ function inferType(text) {
 function extractItems(text) {
   return String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь)\s*/i, '')
-    .replace(/^(список покупок|список|купить|нужно купить|надо купить)[:\s-]*/i, '')
+    .replace(/^(?:мне\s+)?(?:список покупок|список|купить|нужно купить|надо купить)[:\s-]*/i, '')
     .replace(/\s+и\s+/gi, ', ')
     .split(/[,.]/)
     .map(x => x.trim())
@@ -458,7 +458,7 @@ export default function App() {
   const [status, setStatus] = useState('Готов. Нажмите микрофон или введите команду для теста.');
   const [listening, setListening] = useState(false);
   const [pending, setPending] = useState(null);
-  const [useAI, setUseAI] = useState(true);
+  const useAI = true;
   const recognitionRef = useRef(null);
 
   const selectedNote = data.notes.find(n => n.id === selectedId) || null;
@@ -728,28 +728,6 @@ export default function App() {
     processCommand(text);
   }
 
-  function resetDemo() {
-    if (!confirm('Очистить локальные данные демо?')) return;
-    const next = makeInitialData();
-    setData(next);
-    setSelectedFolder('Все');
-    setSelectedId(null);
-    setQuery('');
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }
-
-  const examples = [
-    'У меня идея хочу вечером в душ',
-    'Мне завтра на стрижку в 8 вечера',
-    'Запомни список покупок: молоко, хлеб, яйца',
-    'Запомни номер телефона Сергей гараж 050 123 45 67',
-    'Найди номер Сергея гараж',
-    'Запомни комбинацию цифр один два три четыре и выведи на экран',
-    'Покажи последнюю заметку',
-    'Поделись этой заметкой',
-    'Удали эту заметку'
-  ];
-
   return (
     <div className="app-shell">
       {pending && (
@@ -775,7 +753,6 @@ export default function App() {
         <div className="hero-actions">
           <button className={listening ? 'danger big' : 'primary big'} onClick={listening ? stopListening : startListening}>{listening ? 'Остановить' : 'Говорить'}</button>
           <button className="big" onClick={() => selectedNote ? speak(shareText(selectedNote)) : setStatusVoice('Сначала откройте запись.')}>Прочитать</button>
-          <button className="big" onClick={resetDemo}>Очистить demo</button>
         </div>
       </header>
 
@@ -784,12 +761,8 @@ export default function App() {
           <span>Статус</span>
           <strong>{status}</strong>
         </div>
-        <div className="status-card">
-          <label className="toggle"><input type="checkbox" checked={useAI} onChange={e => setUseAI(e.target.checked)} /> Локальный AI-разбор</label>
-          <small>Бесплатно, без API-ключа и без сервера. Можно выключить для проверки старых правил.</small>
-        </div>
         <form className="manual" onSubmit={submitManual}>
-          <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Тест без микрофона: напишите команду" />
+          <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду или нажмите «Говорить»" />
           <button className="primary">Выполнить</button>
         </form>
       </section>
@@ -822,11 +795,6 @@ export default function App() {
         <aside className="panel details">
           <h2>Открытая запись</h2>
           {selectedNote ? <NoteCard note={selectedNote} selected onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={requestDeleteNote} onCall={callNote} onMessage={messageNote} /> : <p className="muted">Откройте запись или скажите: “покажи последнюю заметку”.</p>}
-
-          <h2>Проверка команд</h2>
-          <div className="examples">
-            {examples.map(example => <button key={example} onClick={() => processCommand(example)}>“{example}”</button>)}
-          </div>
 
           {data.trash.length > 0 && <>
             <h2>Корзина</h2>
