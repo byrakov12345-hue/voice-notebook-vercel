@@ -673,7 +673,7 @@ export default function App() {
       else {
         openNote(latestInFolder);
         speak(shareText(latestInFolder));
-        setStatusVoice(`Читаю последнюю запись из папки ${plan.folder}.`);
+        setStatus('');
       }
       return true;
     }
@@ -719,7 +719,8 @@ export default function App() {
         if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
         openNote(latestInFolder);
         speak(shareText(latestInFolder));
-        return setStatusVoice(`Читаю последнюю запись из папки ${folderMatch.name}.`);
+        setStatus('');
+        return;
       }
       return selectedNote ? speak(shareText(selectedNote)) : setStatusVoice('Сначала откройте запись.');
     }
