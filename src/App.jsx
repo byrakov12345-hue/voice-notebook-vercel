@@ -385,6 +385,7 @@ function shareText(note) {
   if (note.type === 'contact') return `${note.title}\nТелефон: ${note.phone || 'не указан'}`;
   if (note.type === 'shopping_list') return `${note.title}\n${(note.items || []).map((x, i) => `${i + 1}. ${x}`).join('\n')}`;
   if (note.type === 'appointment') return `${note.title}\n${note.dateLabel || ''} ${note.time || ''}\n${note.content}`.trim();
+  if (normalize(note.title) === normalize(note.content)) return `${note.title}`.trim();
   return `${note.title}\n${note.content || ''}`.trim();
 }
 
@@ -469,6 +470,7 @@ function localAIPlan(text, data, currentNote) {
 }
 
 function NoteCard({ note, selected, onOpen, onShare, onCopy, onDelete, onCall, onMessage, onRestore }) {
+  const hasDuplicateBody = normalize(note.title) === normalize(note.content);
   return (
     <article className={`note-card ${selected ? 'selected' : ''}`}>
       <button className="note-main" onClick={() => onOpen(note)}>
@@ -484,7 +486,7 @@ function NoteCard({ note, selected, onOpen, onShare, onCopy, onDelete, onCall, o
         ) : note.type === 'appointment' ? (
           <p><b>Когда:</b> {[note.dateLabel, note.time].filter(Boolean).join(', ') || 'не указано'}<br />{note.content}</p>
         ) : (
-          <p>{note.content}</p>
+          !hasDuplicateBody ? <p>{note.content}</p> : null
         )}
       </button>
       <div className="actions">
