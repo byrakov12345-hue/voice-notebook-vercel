@@ -207,6 +207,10 @@ function isFamilyContext(text) {
   ]);
 }
 
+function resolveTimedEntryFolder(text) {
+  return isFamilyContext(text) ? 'Семья' : 'Встречи';
+}
+
 function chooseFolder(text) {
   const explicit = extractExplicitFolder(text);
   if (explicit) return explicit;
@@ -231,7 +235,7 @@ function inferType(text) {
   if (includesAny(source, ['телефон', 'номер телефона', 'контакт'])) return 'contact';
   if (includesAny(source, ['комбинац', 'код', 'цифр', 'пароль'])) return 'code';
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'shopping_list';
-  if (isFamilyContext(source) && includesAny(source, ['нужно', 'надо', 'сказать', 'напомнить'])) return 'task';
+  if (isFamilyContext(source) && (includesAny(source, ['нужно', 'надо', 'сказать', 'напомнить']) || hasDateOrTime(source))) return 'task';
   if (includesAny(source, ['стриж', 'прием', 'приём', 'встреч', 'барбер', 'парикмахер']) || hasDateOrTime(source)) return 'appointment';
   if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'expense';
   if (includesAny(source, ['задача', 'надо', 'нужно', 'сделать'])) return 'task';
@@ -303,7 +307,7 @@ function createNoteFromLocalText(text) {
     else if (normalize(content).includes('врач')) title = 'Врач';
     else title = cleanTitle(content, 'Встреча');
     return {
-      id: uid('note'), type, folder: 'Встречи', title, content,
+      id: uid('note'), type, folder: resolveTimedEntryFolder(content), title, content,
       dateLabel, time, tags: ['встреча', dateLabel, time, ...tags].filter(Boolean), createdAt: now, updatedAt: now
     };
   }
@@ -340,7 +344,7 @@ function createNoteFromAI(plan, fallbackText) {
   }
 
   if (type === 'appointment') {
-    return { id: uid('note'), type, folder: plan.folder || 'Встречи', title: plan.title || cleanTitle(plan.content || fallbackText, 'Встреча'), content: plan.content || fallbackText, dateLabel: plan.dateLabel || extractAppointmentDateLabel(fallbackText), time: plan.time || extractAppointmentTime(fallbackText), tags: ['встреча', ...(plan.tags || [])], createdAt: now, updatedAt: now };
+    return { id: uid('note'), type, folder: plan.folder || resolveTimedEntryFolder(plan.content || fallbackText), title: plan.title || cleanTitle(plan.content || fallbackText, 'Встреча'), content: plan.content || fallbackText, dateLabel: plan.dateLabel || extractAppointmentDateLabel(fallbackText), time: plan.time || extractAppointmentTime(fallbackText), tags: ['встреча', ...(plan.tags || [])], createdAt: now, updatedAt: now };
   }
 
   return { id: uid('note'), type, folder: plan.folder || chooseFolder(fallbackText), title: plan.title || cleanTitle(plan.content || fallbackText, TYPE_LABELS[type] || 'Заметка'), content: plan.content || fallbackText, tags: Array.isArray(plan.tags) ? plan.tags : [], createdAt: now, updatedAt: now };
@@ -481,7 +485,7 @@ function localAIPlan(text, data, currentNote) {
       let title = cleanTitle(content, 'Встреча');
       if (source.includes('стриж')) title = 'Стрижка';
       else if (source.includes('врач')) title = 'Врач';
-      return { action: 'save_appointment', type, folder: 'Встречи', title, content, dateLabel: appointmentDate, time: appointmentTime, tags: ['встреча', appointmentDate, appointmentTime].filter(Boolean), showAfterSave };
+      return { action: 'save_appointment', type, folder: resolveTimedEntryFolder(content), title, content, dateLabel: appointmentDate, time: appointmentTime, tags: ['встреча', appointmentDate, appointmentTime].filter(Boolean), showAfterSave };
     }
     if (type === 'idea') {
       return { action: 'save_idea', type, folder: 'Идеи', title: cleanTitle(content, 'Идея'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
