@@ -389,6 +389,19 @@ function shareText(note) {
   return `${note.title}\n${note.content || ''}`.trim();
 }
 
+function noteSignature(note) {
+  return JSON.stringify({
+    type: note?.type || '',
+    folder: normalize(note?.folder || ''),
+    title: normalize(note?.title || ''),
+    content: normalize(note?.content || ''),
+    phone: note?.phone || '',
+    time: note?.time || '',
+    dateLabel: normalize(note?.dateLabel || ''),
+    items: Array.isArray(note?.items) ? note.items.map(item => normalize(item)).sort() : []
+  });
+}
+
 function stripSaveWords(text) {
   return String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|мне|у меня|есть|нужно|надо|хочу)\s*/i, '')
@@ -408,6 +421,9 @@ function localAIPlan(text, data, currentNote) {
   if (intent === 'delete') {
     if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё'])) {
       return { action: 'delete_all', needsConfirmation: true, target: 'all' };
+    }
+    if (includesAny(source, ['очисти корзину', 'удали корзину'])) {
+      return { action: 'delete_trash', needsConfirmation: true, target: 'trash' };
     }
     if (source.includes('папк')) {
       const folderMatch = data.folders.find(f => source.includes(normalize(f.name)));
@@ -533,11 +549,33 @@ export default function App() {
   }
 
   function saveNote(note, showAfterSave = false) {
-    setData(prev => ({
-      ...prev,
-      folders: ensureFolder(prev.folders, note.folder),
-      notes: [note, ...prev.notes]
-    }));
+    const freshWindowMs = 15000;
+    const signature = noteSignature(note);
+    let duplicateDetected = false;
+
+    setData(prev => {
+      const nowTs = Date.now();
+      const duplicate = prev.notes
+        .slice(0, 10)
+        .find(existing => noteSignature(existing) === signature && nowTs - new Date(existing.createdAt).getTime() <= freshWindowMs);
+
+      if (duplicate) {
+        duplicateDetected = true;
+        return prev;
+      }
+
+      return {
+        ...prev,
+        folders: ensureFolder(prev.folders, note.folder),
+        notes: [note, ...prev.notes]
+      };
+    });
+
+    if (duplicateDetected) {
+      setStatusVoice(`Такая запись уже только что сохранена в папку ${note.folder}.`, false);
+      return;
+    }
+
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
     setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
@@ -696,6 +734,10 @@ export default function App() {
       return true;
     }
     if (plan.action === 'delete_all') { requestDeleteAll(); return true; }
+    if (plan.action === 'delete_trash') {
+      setPending({ kind: 'trash', message: 'Очистить корзину навсегда?', preview: `В корзине: ${data.trash.length}` });
+      return true;
+    }
     if (plan.action === 'delete_folder') { plan.folder ? requestDeleteFolder(plan.folder) : setStatusVoice('Не указана папка.'); return true; }
     if (plan.action === 'delete_note') {
       const found = plan.target === 'current' ? selectedNote : plan.target === 'latest' ? [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] : searchNotes(data.notes, plan.query || originalText)[0];
