@@ -199,11 +199,20 @@ function extractExplicitFolder(text) {
   return match?.[1] ? capitalize(match[1]) : '';
 }
 
+function isFamilyContext(text) {
+  const source = normalize(text);
+  return includesAny(source, [
+    'сын', 'сыну', 'сына', 'дочь', 'дочке', 'дочери', 'мама', 'маме', 'папа', 'папе',
+    'жена', 'жене', 'муж', 'мужу', 'семья', 'ребенок', 'ребёнок', 'дети', 'ребёнку', 'ребенку'
+  ]);
+}
+
 function chooseFolder(text) {
   const explicit = extractExplicitFolder(text);
   if (explicit) return explicit;
   const source = normalize(text);
   if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'Идеи';
+  if (isFamilyContext(source)) return 'Семья';
   if (includesAny(source, ['стриж', 'встреч', 'прием', 'приём', 'барбер', 'парикмахер']) || hasDateOrTime(source)) return 'Встречи';
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'Покупки';
   if (includesAny(source, ['телефон', 'номер', 'контакт'])) return 'Контакты';
@@ -222,6 +231,7 @@ function inferType(text) {
   if (includesAny(source, ['телефон', 'номер телефона', 'контакт'])) return 'contact';
   if (includesAny(source, ['комбинац', 'код', 'цифр', 'пароль'])) return 'code';
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'shopping_list';
+  if (isFamilyContext(source) && includesAny(source, ['нужно', 'надо', 'сказать', 'напомнить'])) return 'task';
   if (includesAny(source, ['стриж', 'прием', 'приём', 'встреч', 'барбер', 'парикмахер']) || hasDateOrTime(source)) return 'appointment';
   if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'expense';
   if (includesAny(source, ['задача', 'надо', 'нужно', 'сделать'])) return 'task';
@@ -774,8 +784,8 @@ export default function App() {
     const source = normalize(spoken);
 
     if (pending) {
-      if (includesAny(source, ['да', 'подтверждаю', 'удалить', 'согласен', 'согласна'])) return confirmPending();
-      if (includesAny(source, ['нет', 'отмена', 'отмени', 'не надо'])) return cancelPending();
+      if (includesAny(source, ['да', 'подтверждаю', 'подтверди', 'подтвердить', 'удалить', 'очистить', 'согласен', 'согласна', 'ок', 'хорошо'])) return confirmPending();
+      if (includesAny(source, ['нет', 'отмена', 'отмени', 'не надо', 'отбой', 'стоп'])) return cancelPending();
     }
 
     if (useAI) {
