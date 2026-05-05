@@ -35,7 +35,7 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .manual input, .notes-head input { width: 100%; min-width: 0; color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; padding: 14px 16px; outline: none; }
 .manual input::placeholder, .notes-head input::placeholder { color: #64748b; }
 
-.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
+.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 18px; align-items: start; }
 .panel { border: 1px solid rgba(255,255,255,0.1); border-radius: 28px; background: rgba(255,255,255,0.08); padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.28); }
 .panel h2 { margin: 0 0 14px; font-size: 22px; letter-spacing: -0.03em; }
 .folders { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
@@ -43,14 +43,11 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .folder.active { background: #f8fafc; color: #020617; font-weight: 800; }
 .folder span { opacity: .75; }
 .folder-tools { display: grid; gap: 8px; margin-top: 12px; }
-.trash-box { margin-top: 16px; padding: 14px; border-radius: 20px; background: rgba(15,23,42,0.78); border: 1px solid rgba(255,255,255,0.08); }
-.trash-box p { margin: 8px 0 12px; color: #94a3b8; }
-
 .notes-head { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 14px; }
 .notes-head h2 { margin-bottom: 2px; }
 .notes-head p { margin: 0; color: #94a3b8; }
 .note-list { display: grid; gap: 12px; max-height: 72vh; overflow: auto; padding-right: 4px; }
-.details { display: grid; gap: 14px; }
+.selected-inline { margin-bottom: 14px; }
 
 .note-card { border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 14px; background: rgba(15,23,42,0.78); }
 .note-card.selected { border-color: rgba(255,255,255,0.52); background: rgba(255,255,255,0.14); }
@@ -63,22 +60,8 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .actions button { padding: 8px 11px; font-size: 14px; }
 .empty, .muted { color: #94a3b8; padding: 28px; text-align: center; border: 1px dashed rgba(255,255,255,0.16); border-radius: 24px; }
-.examples { display: grid; gap: 8px; }
-.examples button { text-align: left; background: rgba(15,23,42,0.78); }
-.trash-list { display: grid; gap: 10px; max-height: 330px; overflow: auto; }
-
-.modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.72); display: grid; place-items: center; padding: 18px; }
-.modal { width: min(560px, 100%); border-radius: 28px; border: 1px solid rgba(255,255,255,0.12); background: #020617; padding: 24px; box-shadow: 0 30px 100px rgba(0,0,0,0.55); }
-.modal h2 { margin: 0 0 10px; font-size: 28px; }
-.modal p { color: #cbd5e1; }
-.modal pre { white-space: pre-wrap; background: rgba(255,255,255,0.08); border-radius: 18px; padding: 14px; color: #f8fafc; }
-.modal-actions { display: flex; gap: 10px; margin: 18px 0 10px; }
-.modal-actions button { flex: 1; }
-.modal small { color: #94a3b8; }
-
 @media (max-width: 1180px) {
   .layout { grid-template-columns: 240px minmax(0, 1fr); }
-  .details { grid-column: 1 / -1; }
 }
 
 @media (max-width: 820px) {

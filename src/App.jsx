@@ -96,8 +96,7 @@ function makeInitialData() {
   const now = new Date().toISOString();
   return {
     folders: DEFAULT_FOLDERS.map(name => ({ id: uid('folder'), name, createdAt: now })),
-    notes: [],
-    trash: []
+    notes: []
   };
 }
 
@@ -108,8 +107,7 @@ function loadData() {
     const parsed = JSON.parse(raw);
     return {
       folders: Array.isArray(parsed.folders) && parsed.folders.length ? parsed.folders : makeInitialData().folders,
-      notes: Array.isArray(parsed.notes) ? parsed.notes : [],
-      trash: Array.isArray(parsed.trash) ? parsed.trash : []
+      notes: Array.isArray(parsed.notes) ? parsed.notes : []
     };
   } catch {
     return makeInitialData();
@@ -355,6 +353,7 @@ function detectIntent(text) {
   if (includesAny(source, ['удали', 'удалить', 'очисти', 'сотри', 'стереть'])) return 'delete';
   if (includesAny(source, ['поделись', 'поделиться', 'отправь', 'скинь'])) return 'share';
   if (includesAny(source, ['прочитай', 'зачитай', 'озвучь'])) return 'read';
+  if (includesAny(source, ['открой папку', 'покажи папку', 'перейди в папку'])) return 'open_folder';
   if (includesAny(source, ['позвони', 'набери'])) return 'call';
   if (includesAny(source, ['напиши', 'смс', 'sms', 'whatsapp', 'ватсап', 'вацап'])) return 'message';
   if (includesAny(source, ['покажи послед', 'выведи послед', 'последнюю заметку', 'что я только что записал'])) return 'show_latest';
@@ -433,19 +432,20 @@ function localAIPlan(text, data, currentNote) {
   const showAfterSave = includesAny(source, ['выведи', 'покажи', 'открой', 'на экран']);
 
   if (intent === 'delete') {
-    if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё'])) {
+    if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'очисти блокнот'])) {
       return { action: 'delete_all', needsConfirmation: true, target: 'all' };
     }
-    if (includesAny(source, ['очисти корзину', 'удали корзину'])) {
-      return { action: 'delete_trash', needsConfirmation: true, target: 'trash' };
+    if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали папку'])) {
+      const folderMatch = findFolderByText(data.folders, text);
+      return { action: 'clear_folder', folder: folderMatch?.name || '', target: 'folder' };
     }
-    if (source.includes('папк')) {
-      const folderMatch = data.folders.find(f => source.includes(normalize(f.name)));
-      return { action: 'delete_folder', folder: folderMatch?.name || '', needsConfirmation: true, target: 'folder' };
+    if (source.includes('послед') && source.includes('папк')) {
+      const folderMatch = findFolderByText(data.folders, text);
+      return { action: 'delete_note', folder: folderMatch?.name || '', target: folderMatch ? 'folder_latest' : 'latest' };
     }
-    if (source.includes('послед')) return { action: 'delete_note', target: 'latest', needsConfirmation: true };
-    if (includesAny(source, ['это', 'эту', 'ее', 'её', 'его']) && currentNote) return { action: 'delete_note', target: 'current', needsConfirmation: true };
-    return { action: 'delete_note', target: 'specific', query: text, needsConfirmation: true };
+    if (source.includes('послед')) return { action: 'delete_note', target: 'latest' };
+    if (includesAny(source, ['это', 'эту', 'ее', 'её', 'его']) && currentNote) return { action: 'delete_note', target: 'current' };
+    return { action: 'delete_note', target: 'specific', query: text };
   }
 
   if (intent === 'share') return { action: 'share_current', target: 'current' };
@@ -453,6 +453,10 @@ function localAIPlan(text, data, currentNote) {
     const folderMatch = findFolderByText(data.folders, text);
     if (folderMatch) return { action: 'read_folder_latest', folder: folderMatch.name, target: 'folder' };
     return { action: 'read_current', target: 'current' };
+  }
+  if (intent === 'open_folder') {
+    const folderMatch = findFolderByText(data.folders, text);
+    return { action: 'open_folder', folder: folderMatch?.name || '' };
   }
   if (intent === 'call') return { action: 'call_contact', query: text, target: includesAny(source, ['ему', 'ей', 'этому']) ? 'current' : 'specific' };
   if (intent === 'message') return { action: 'message_contact', query: text, target: includesAny(source, ['ему', 'ей', 'этому']) ? 'current' : 'specific' };
@@ -539,7 +543,7 @@ export default function App() {
   const [command, setCommand] = useState('');
   const [status, setStatus] = useState('Готов. Нажмите микрофон или введите команду для теста.');
   const [listening, setListening] = useState(false);
-  const [pending, setPending] = useState(null);
+  const [suggestedFolder, setSuggestedFolder] = useState('');
   const useAI = true;
   const recognitionRef = useRef(null);
 
@@ -549,14 +553,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [data]);
-
-  useEffect(() => {
-    if (!pending || !speechSupported || listening) return;
-    const timer = window.setTimeout(() => {
-      startListening();
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [pending, speechSupported, listening]);
 
   const visibleNotes = useMemo(() => {
     let list = [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -568,6 +564,40 @@ export default function App() {
   function setStatusVoice(text, voice = true) {
     setStatus(text);
     if (voice) speak(text);
+  }
+
+  function openFolder(folderName, voice = true) {
+    if (!folderName) return setStatusVoice('Не понял, какую папку открыть.', voice);
+    setSelectedFolder(folderName);
+    setSelectedId(null);
+    setQuery('');
+    setSuggestedFolder('');
+    setStatusVoice(`Открыта папка ${folderName}.`, voice);
+  }
+
+  function deleteNoteNow(note) {
+    if (!note) return;
+    setData(prev => ({ ...prev, notes: prev.notes.filter(n => n.id !== note.id) }));
+    setSelectedId(current => (current === note.id ? null : current));
+    setStatusVoice(`Удалено: ${note.title}.`, false);
+  }
+
+  function clearFolderNow(folderName) {
+    if (!folderName || folderName === 'Все') return setStatusVoice('Сначала выберите папку.', false);
+    const count = data.notes.filter(n => n.folder === folderName).length;
+    if (!count) return setStatusVoice(`В папке ${folderName} нет записей.`, false);
+    setData(prev => ({ ...prev, notes: prev.notes.filter(n => n.folder !== folderName) }));
+    setSelectedId(null);
+    setSelectedFolder(folderName);
+    setStatusVoice(`Папка ${folderName} очищена.`, false);
+  }
+
+  function clearNotebookNow() {
+    if (!data.notes.length) return setStatusVoice('Блокнот уже пуст.', false);
+    setData(prev => ({ ...prev, notes: [] }));
+    setSelectedId(null);
+    setSelectedFolder('Все');
+    setStatusVoice('Блокнот очищен.', false);
   }
 
   function saveNote(note, showAfterSave = false) {
@@ -600,6 +630,7 @@ export default function App() {
 
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
+    setSuggestedFolder('');
     setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
   }
 
@@ -662,81 +693,34 @@ export default function App() {
     window.location.href = `sms:${note.phone}`;
   }
 
-  function requestDeleteNote(note) {
-    setPending({ kind: 'note', noteId: note.id, message: 'Удалить эту запись? Она будет перемещена в корзину.', preview: shareText(note) });
-  }
-
-  function requestDeleteFolder(folderName) {
-    const count = data.notes.filter(n => n.folder === folderName).length;
-    setPending({ kind: 'folder', folderName, message: `Удалить папку “${folderName}” и записи внутри?`, preview: `Записей: ${count}` });
-  }
-
-  function requestDeleteAll() {
-    setPending({ kind: 'all', message: 'Удалить все записи? Они будут перемещены в корзину.', preview: `Записей: ${data.notes.length}` });
-  }
-
-  function confirmPending() {
-    if (!pending) return;
-    if (pending.kind === 'note') {
-      setData(prev => {
-        const note = prev.notes.find(n => n.id === pending.noteId);
-        return { ...prev, notes: prev.notes.filter(n => n.id !== pending.noteId), trash: note ? [{ ...note, deletedAt: new Date().toISOString() }, ...prev.trash] : prev.trash };
-      });
-      setSelectedId(null);
-      setStatusVoice('Запись перемещена в корзину.');
-    }
-    if (pending.kind === 'folder') {
-      setData(prev => {
-        const moving = prev.notes.filter(n => n.folder === pending.folderName);
-        return { ...prev, notes: prev.notes.filter(n => n.folder !== pending.folderName), folders: prev.folders.filter(f => f.name !== pending.folderName), trash: [...moving.map(n => ({ ...n, deletedAt: new Date().toISOString() })), ...prev.trash] };
-      });
-      setSelectedFolder('Все');
-      setSelectedId(null);
-      setStatusVoice('Папка удалена, записи перемещены в корзину.');
-    }
-    if (pending.kind === 'all') {
-      setData(prev => ({ ...prev, notes: [], trash: [...prev.notes.map(n => ({ ...n, deletedAt: new Date().toISOString() })), ...prev.trash] }));
-      setSelectedFolder('Все');
-      setSelectedId(null);
-      setStatusVoice('Все записи перемещены в корзину.');
-    }
-    if (pending.kind === 'trash') {
-      setData(prev => ({ ...prev, trash: [] }));
-      setStatusVoice('Корзина очищена.');
-    }
-    setPending(null);
-  }
-
-  function cancelPending() {
-    setPending(null);
-    setStatusVoice('Отменено.');
-  }
-
-  function restoreNote(note) {
-    setData(prev => ({ ...prev, notes: [{ ...note, deletedAt: undefined }, ...prev.notes], trash: prev.trash.filter(n => n.id !== note.id) }));
-    setSelectedId(note.id);
-    setSelectedFolder(note.folder);
-    setStatusVoice('Запись восстановлена.');
-  }
-
   function handleDelete(text) {
     const source = normalize(text);
-    if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё'])) return requestDeleteAll();
-    if (includesAny(source, ['очисти корзину', 'удали корзину'])) return setPending({ kind: 'trash', message: 'Очистить корзину навсегда?', preview: `В корзине: ${data.trash.length}` });
+    if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'очисти блокнот'])) return clearNotebookNow();
+    if (includesAny(source, ['очисти корзину', 'удали корзину'])) return setStatusVoice('Корзины больше нет. Удаление выполняется сразу.', false);
+    if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали папку'])) {
+      const folder = findFolderByText(data.folders, text) || (selectedFolder !== 'Все' ? { name: selectedFolder } : null);
+      return folder ? clearFolderNow(folder.name) : setStatusVoice('Не понял, какую папку очистить.', false);
+    }
     if (source.includes('папк')) {
-      const folder = data.folders.find(f => source.includes(normalize(f.name)));
-      if (folder) return requestDeleteFolder(folder.name);
+      const folder = findFolderByText(data.folders, text);
+      if (source.includes('послед') && folder) {
+        const latestInFolder = [...data.notes]
+          .filter(note => note.folder === folder.name)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        return latestInFolder ? deleteNoteNow(latestInFolder) : setStatusVoice(`В папке ${folder.name} нет записей.`, false);
+      }
+      if (folder) return clearFolderNow(folder.name);
       return setStatusVoice('Не понял, какую папку удалить.');
     }
     if (source.includes('послед')) {
       const latest = [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-      return latest ? requestDeleteNote(latest) : setStatusVoice('Нет записей для удаления.');
+      return latest ? deleteNoteNow(latest) : setStatusVoice('Нет записей для удаления.', false);
     }
     if (includesAny(source, ['это', 'эту', 'ее', 'её'])) {
-      return selectedNote ? requestDeleteNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
+      return selectedNote ? deleteNoteNow(selectedNote) : setStatusVoice('Сначала откройте запись.', false);
     }
     const found = searchNotes(data.notes, text)[0];
-    return found ? requestDeleteNote(found) : setStatusVoice('Не нашёл запись для удаления.');
+    return found ? deleteNoteNow(found) : setStatusVoice('Не нашёл запись для удаления.', false);
   }
 
   async function executePlan(plan, originalText) {
@@ -755,15 +739,18 @@ export default function App() {
       setStatusVoice(`Папка ${folderName} создана или уже существует.`);
       return true;
     }
-    if (plan.action === 'delete_all') { requestDeleteAll(); return true; }
-    if (plan.action === 'delete_trash') {
-      setPending({ kind: 'trash', message: 'Очистить корзину навсегда?', preview: `В корзине: ${data.trash.length}` });
-      return true;
-    }
-    if (plan.action === 'delete_folder') { plan.folder ? requestDeleteFolder(plan.folder) : setStatusVoice('Не указана папка.'); return true; }
+    if (plan.action === 'open_folder') { return plan.folder ? openFolder(plan.folder) : setStatusVoice('Не понял, какую папку открыть.'); }
+    if (plan.action === 'delete_all') { clearNotebookNow(); return true; }
+    if (plan.action === 'delete_trash') { setStatusVoice('Корзины больше нет. Удаление выполняется сразу.', false); return true; }
+    if (plan.action === 'clear_folder') { plan.folder ? clearFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
+    if (plan.action === 'delete_folder') { plan.folder ? clearFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
     if (plan.action === 'delete_note') {
-      const found = plan.target === 'current' ? selectedNote : plan.target === 'latest' ? [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] : searchNotes(data.notes, plan.query || originalText)[0];
-      found ? requestDeleteNote(found) : setStatusVoice('Не нашёл запись для удаления.');
+      const found =
+        plan.target === 'current' ? selectedNote
+          : plan.target === 'latest' ? [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+            : plan.target === 'folder_latest' && plan.folder ? [...data.notes].filter(note => note.folder === plan.folder).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+              : searchNotes(data.notes, plan.query || originalText)[0];
+      found ? deleteNoteNow(found) : setStatusVoice('Не нашёл запись для удаления.', false);
       return true;
     }
     if (plan.action === 'share_current') { selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.'); return true; }
@@ -776,6 +763,7 @@ export default function App() {
       else {
         openNote(latestInFolder);
         speak(shareText(latestInFolder));
+        setSuggestedFolder(plan.folder);
         setStatus('');
       }
       return true;
@@ -795,11 +783,6 @@ export default function App() {
     setCommand(spoken);
     const source = normalize(spoken);
 
-    if (pending) {
-      if (includesAny(source, ['да', 'подтверждаю', 'подтверди', 'подтвердить', 'удалить', 'очистить', 'согласен', 'согласна', 'ок', 'хорошо'])) return confirmPending();
-      if (includesAny(source, ['нет', 'отмена', 'отмени', 'не надо', 'отбой', 'стоп'])) return cancelPending();
-    }
-
     if (useAI) {
       setStatus('Локальный AI разбирает команду...');
       const plan = localAIPlan(spoken, data, selectedNote);
@@ -812,6 +795,10 @@ export default function App() {
     if (intent === 'search') return performSearch(spoken);
     if (intent === 'show_latest') return showLatest(spoken);
     if (intent === 'delete') return handleDelete(spoken);
+    if (intent === 'open_folder') {
+      const folderMatch = findFolderByText(data.folders, spoken);
+      return folderMatch ? openFolder(folderMatch.name) : setStatusVoice('Не понял, какую папку открыть.', false);
+    }
     if (intent === 'share') return selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
     if (intent === 'read') {
       const folderMatch = findFolderByText(data.folders, spoken);
@@ -822,6 +809,7 @@ export default function App() {
         if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
         openNote(latestInFolder);
         speak(shareText(latestInFolder));
+        setSuggestedFolder(folderMatch.name);
         setStatus('');
         return;
       }
@@ -872,29 +860,13 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {pending && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h2>Подтвердите действие</h2>
-            <p>{pending.message}</p>
-            {pending.preview && <pre>{pending.preview}</pre>}
-            <div className="modal-actions">
-              <button className="danger" onClick={confirmPending}>Подтвердить</button>
-              <button onClick={cancelPending}>Отмена</button>
-            </div>
-            <small>Микрофон включается автоматически. Голосом можно сказать: “да удалить”, “подтвердить” или “отмена”.</small>
-          </div>
-        </div>
-      )}
-
       <header className="hero">
         <div>
-          <h1>Умный голосовой блокнот</h1>
-          <p>Сохраняет, сортирует, ищет и выполняет действия по голосу.</p>
+          <h1>АИ Блокнот</h1>
+          <p>Микрофон, папки и быстрые команды. Остальное происходит в фоне.</p>
         </div>
         <div className="hero-actions">
           <button className={listening ? 'danger big' : 'primary big'} onClick={listening ? stopListening : startListening}>{listening ? 'Остановить' : 'Говорить'}</button>
-          <button className="big" onClick={() => selectedNote ? speak(shareText(selectedNote)) : setStatusVoice('Сначала откройте запись.')}>Прочитать</button>
         </div>
       </header>
 
@@ -902,6 +874,7 @@ export default function App() {
         <div className="status-card wide">
           <span>Статус</span>
           <strong>{status}</strong>
+          {suggestedFolder ? <button onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
         </div>
         <form className="manual" onSubmit={submitManual}>
           <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду или нажмите «Говорить»" />
@@ -920,22 +893,17 @@ export default function App() {
           <div className="folder-tools">
             <button
               disabled={selectedFolder === 'Все' || !data.notes.some(n => n.folder === selectedFolder)}
-              onClick={() => requestDeleteFolder(selectedFolder)}
+              onClick={() => clearFolderNow(selectedFolder)}
             >
               Очистить папку
             </button>
             <button
               className="danger"
               disabled={!data.notes.length}
-              onClick={requestDeleteAll}
+              onClick={clearNotebookNow}
             >
               Очистить блокнот
             </button>
-          </div>
-          <div className="trash-box">
-            <b>Корзина</b>
-            <p>{data.trash.length} записей</p>
-            <button disabled={!data.trash.length} onClick={() => setPending({ kind: 'trash', message: 'Очистить корзину навсегда?', preview: `В корзине: ${data.trash.length}` })}>Очистить</button>
           </div>
         </aside>
 
@@ -944,22 +912,11 @@ export default function App() {
             <div><h2>{selectedFolder}</h2><p>{visibleNotes.length} записей</p></div>
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Поиск по заметкам" />
           </div>
+          {selectedNote ? <div className="selected-inline"><NoteCard note={selectedNote} selected onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} /></div> : null}
           <div className="note-list">
-            {visibleNotes.length ? visibleNotes.map(note => <NoteCard key={note.id} note={note} selected={selectedId === note.id} onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={requestDeleteNote} onCall={callNote} onMessage={messageNote} />) : <div className="empty">Записей пока нет. Скажите или напишите команду.</div>}
+            {visibleNotes.length ? visibleNotes.map(note => <NoteCard key={note.id} note={note} selected={selectedId === note.id} onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} />) : <div className="empty">Записей пока нет. Скажите или напишите команду.</div>}
           </div>
         </section>
-
-        <aside className="panel details">
-          <h2>Открытая запись</h2>
-          {selectedNote ? <NoteCard note={selectedNote} selected onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={requestDeleteNote} onCall={callNote} onMessage={messageNote} /> : <p className="muted">Откройте запись или скажите: “покажи последнюю заметку”.</p>}
-
-          {data.trash.length > 0 && <>
-            <h2>Корзина</h2>
-            <div className="trash-list">
-              {data.trash.slice(0, 4).map(note => <NoteCard key={`trash_${note.id}`} note={note} selected={false} onOpen={() => {}} onShare={shareNote} onCopy={copyNote} onDelete={() => setPending({ kind: 'trash', message: 'Очистить корзину навсегда?', preview: `В корзине: ${data.trash.length}` })} onCall={callNote} onMessage={messageNote} onRestore={restoreNote} />)}
-            </div>
-          </>}
-        </aside>
       </main>
     </div>
   );
