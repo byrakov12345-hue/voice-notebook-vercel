@@ -13,6 +13,24 @@ const TYPE_LABELS = {
   task: 'Задача', contact: 'Контакт', code: 'Код', expense: 'Расход'
 };
 
+const FOLDER_SIGNALS = {
+  Идеи: ['идея', 'идею', 'придумал', 'придумала', 'задумка', 'концепт'],
+  Встречи: ['встреча', 'встречи', 'прием', 'приём', 'запись', 'стрижка', 'врач', 'барбер', 'парикмахер'],
+  Покупки: ['купить', 'покупка', 'покупки', 'магазин', 'продукты', 'список покупок', 'заказать'],
+  Задачи: ['задача', 'сделать', 'выполнить', 'нужно', 'надо', 'проверить', 'подготовить'],
+  Контакты: ['контакт', 'номер', 'телефон', 'позвонить', 'написать'],
+  'Коды и комбинации': ['код', 'пароль', 'комбинация', 'цифры', 'пин'],
+  Расходы: ['потратил', 'потратила', 'расход', 'заплатил', 'заплатила', 'рублей', 'рубля', 'рубль', 'евро', 'доллар'],
+  Клиенты: ['клиент', 'заказчик', 'лид', 'сделка', 'коммерческое'],
+  Работа: ['работа', 'проект', 'созвон', 'бриф', 'дедлайн', 'заказ'],
+  Дом: ['дом', 'квартира', 'ремонт', 'кухня', 'ванна', 'мебель'],
+  Машина: ['машина', 'авто', 'мойка', 'бензин', 'масло', 'шины', 'гараж'],
+  Семья: ['сын', 'сыну', 'сына', 'дочь', 'дочке', 'дочери', 'мама', 'маме', 'папа', 'папе', 'жена', 'жене', 'муж', 'мужу', 'семья', 'ребенок', 'ребёнок', 'дети'],
+  Здоровье: ['здоровье', 'таблетки', 'лекарство', 'врач', 'анализы', 'температура'],
+  'Учёба': ['учеба', 'учёба', 'урок', 'школа', 'университет', 'экзамен', 'домашка'],
+  Важное: ['важно', 'срочно', 'обязательно', 'не забыть', 'критично']
+};
+
 const digitWords = {
   ноль: '0', один: '1', одна: '1', два: '2', две: '2', три: '3', четыре: '4',
   пять: '5', шесть: '6', семь: '7', восемь: '8', девять: '9'
@@ -126,6 +144,11 @@ function includesAny(text, words) {
   return words.some(word => source.includes(normalize(word)));
 }
 
+function startsWithAny(text, words) {
+  const source = normalize(text);
+  return words.some(word => source.startsWith(normalize(word)));
+}
+
 function wordsToDigits(text) {
   return normalize(text).split(' ').map(t => digitWords[t] ?? t).join(' ');
 }
@@ -209,12 +232,28 @@ function resolveTimedEntryFolder(text) {
   return isFamilyContext(text) ? 'Семья' : 'Встречи';
 }
 
+function scoreFolderSignals(text) {
+  const source = normalize(text);
+  const ranked = Object.entries(FOLDER_SIGNALS)
+    .map(([folder, signals]) => ({
+      folder,
+      score: signals.reduce((sum, signal) => sum + (source.includes(normalize(signal)) ? 1 : 0), 0)
+    }))
+    .filter(entry => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  return ranked[0]?.folder || '';
+}
+
 function chooseFolder(text) {
   const explicit = extractExplicitFolder(text);
   if (explicit) return explicit;
   const source = normalize(text);
   if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'Идеи';
   if (isFamilyContext(source)) return 'Семья';
+  if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'Расходы';
+  const scoredFolder = scoreFolderSignals(source);
+  if (scoredFolder) return scoredFolder;
   if (includesAny(source, ['стриж', 'встреч', 'прием', 'приём', 'барбер', 'парикмахер']) || hasDateOrTime(source)) return 'Встречи';
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'Покупки';
   if (includesAny(source, ['телефон', 'номер', 'контакт'])) return 'Контакты';
@@ -222,7 +261,6 @@ function chooseFolder(text) {
   if (includesAny(source, ['клиент', 'заказчик', 'цена'])) return 'Клиенты';
   if (includesAny(source, ['машина', 'авто', 'гараж', 'масло', 'бензин'])) return 'Машина';
   if (includesAny(source, ['дом', 'квартира', 'ремонт'])) return 'Дом';
-  if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'Расходы';
   if (includesAny(source, ['задача', 'надо', 'нужно', 'сделать'])) return 'Задачи';
   return 'Разное';
 }
@@ -232,10 +270,11 @@ function inferType(text) {
   if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'idea';
   if (includesAny(source, ['телефон', 'номер телефона', 'контакт'])) return 'contact';
   if (includesAny(source, ['комбинац', 'код', 'цифр', 'пароль'])) return 'code';
+  if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'expense';
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'shopping_list';
+  if (includesAny(source, ['клиент']) && includesAny(source, ['просил', 'нужно', 'надо', 'позвонить', 'написать', 'связаться', 'перезвонить'])) return 'task';
   if (isFamilyContext(source) && (includesAny(source, ['нужно', 'надо', 'сказать', 'напомнить']) || hasDateOrTime(source))) return 'task';
   if (includesAny(source, ['стриж', 'прием', 'приём', 'встреч', 'барбер', 'парикмахер']) || hasDateOrTime(source)) return 'appointment';
-  if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'expense';
   if (includesAny(source, ['задача', 'надо', 'нужно', 'сделать'])) return 'task';
   return 'note';
 }
@@ -352,10 +391,10 @@ function detectIntent(text) {
   const source = normalize(text);
   if (includesAny(source, ['удали', 'удалить', 'очисти', 'сотри', 'стереть'])) return 'delete';
   if (includesAny(source, ['поделись', 'поделиться', 'отправь', 'скинь'])) return 'share';
-  if (includesAny(source, ['прочитай', 'зачитай', 'озвучь'])) return 'read';
+  if (includesAny(source, ['прочитай', 'зачитай', 'озвучь', 'продиктуй'])) return 'read';
   if (includesAny(source, ['открой папку', 'покажи папку', 'перейди в папку'])) return 'open_folder';
-  if (includesAny(source, ['позвони', 'набери'])) return 'call';
-  if (includesAny(source, ['напиши', 'смс', 'sms', 'whatsapp', 'ватсап', 'вацап'])) return 'message';
+  if (startsWithAny(source, ['позвони', 'набери'])) return 'call';
+  if (startsWithAny(source, ['напиши', 'смс', 'sms', 'whatsapp', 'ватсап', 'вацап'])) return 'message';
   if (includesAny(source, ['покажи послед', 'выведи послед', 'последнюю заметку', 'что я только что записал'])) return 'show_latest';
   if (includesAny(source, ['найди', 'найти', 'поищи', 'поиск', 'что я записывал'])) return 'search';
   if (includesAny(source, ['создай папку', 'создать папку'])) return 'create_folder';
@@ -402,6 +441,12 @@ function shareText(note) {
   return `${note.title}\n${note.content || ''}`.trim();
 }
 
+function contactSpeechText(note) {
+  if (!note) return '';
+  if (note.phone) return `Телефон ${note.phone}`;
+  return shareText(note);
+}
+
 function noteSignature(note) {
   return JSON.stringify({
     type: note?.type || '',
@@ -415,11 +460,26 @@ function noteSignature(note) {
   });
 }
 
+function isSameOrNearDuplicate(existing, incoming) {
+  if (!existing || !incoming) return false;
+  if (noteSignature(existing) === noteSignature(incoming)) return true;
+
+  const sameFolder = normalize(existing.folder) === normalize(incoming.folder);
+  const sameType = String(existing.type || '') === String(incoming.type || '');
+  const sameTitle = normalize(existing.title) === normalize(incoming.title);
+  const sameContent = normalize(existing.content) === normalize(incoming.content);
+  const samePhone = String(existing.phone || '') !== '' && String(existing.phone || '') === String(incoming.phone || '');
+  const sameItems = JSON.stringify((existing.items || []).map(item => normalize(item)).sort()) === JSON.stringify((incoming.items || []).map(item => normalize(item)).sort());
+
+  return sameFolder && sameType && ((sameTitle && sameContent) || samePhone || sameItems);
+}
+
 function stripSaveWords(text) {
   return String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|мне|у меня|есть|нужно|надо|хочу)\s*/i, '')
     .replace(/^(идея|идею|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
     .replace(/\s+и\s+(покажи|выведи|открой|прочитай).*$/i, '')
+    .replace(/^что\s+/i, '')
     .trim();
 }
 
@@ -432,8 +492,11 @@ function localAIPlan(text, data, currentNote) {
   const showAfterSave = includesAny(source, ['выведи', 'покажи', 'открой', 'на экран']);
 
   if (intent === 'delete') {
+    if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) {
+      return { action: 'delete_trash', target: 'trash' };
+    }
     if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'очисти блокнот'])) {
-      return { action: 'delete_all', needsConfirmation: true, target: 'all' };
+      return { action: 'delete_all', target: 'all' };
     }
     if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали папку'])) {
       const folderMatch = findFolderByText(data.folders, text);
@@ -451,6 +514,9 @@ function localAIPlan(text, data, currentNote) {
   if (intent === 'share') return { action: 'share_current', target: 'current' };
   if (intent === 'read') {
     const folderMatch = findFolderByText(data.folders, text);
+    if (folderMatch?.name === 'Контакты' || includesAny(source, ['номер', 'телефон', 'контакт'])) {
+      return { action: 'read_contact_latest', folder: 'Контакты', target: 'folder' };
+    }
     if (folderMatch) return { action: 'read_folder_latest', folder: folderMatch.name, target: 'folder' };
     return { action: 'read_current', target: 'current' };
   }
@@ -495,7 +561,7 @@ function localAIPlan(text, data, currentNote) {
       return { action: 'save_idea', type, folder: 'Идеи', title: cleanTitle(content, 'Идея'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
     if (type === 'task') {
-      return { action: 'save_task', type, folder: 'Задачи', title: cleanTitle(content, 'Задача'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
+      return { action: 'save_task', type, folder: chooseFolder(content || text), title: cleanTitle(content, 'Задача'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
     return { action: 'save_note', type: 'note', folder, title: cleanTitle(content, 'Заметка'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
   }
@@ -601,15 +667,14 @@ export default function App() {
   }
 
   function saveNote(note, showAfterSave = false) {
-    const freshWindowMs = 15000;
-    const signature = noteSignature(note);
+    const freshWindowMs = 90000;
     let duplicateDetected = false;
 
     setData(prev => {
       const nowTs = Date.now();
       const duplicate = prev.notes
-        .slice(0, 10)
-        .find(existing => noteSignature(existing) === signature && nowTs - new Date(existing.createdAt).getTime() <= freshWindowMs);
+        .slice(0, 25)
+        .find(existing => isSameOrNearDuplicate(existing, note) && nowTs - new Date(existing.createdAt).getTime() <= freshWindowMs);
 
       if (duplicate) {
         duplicateDetected = true;
@@ -696,7 +761,7 @@ export default function App() {
   function handleDelete(text) {
     const source = normalize(text);
     if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'очисти блокнот'])) return clearNotebookNow();
-    if (includesAny(source, ['очисти корзину', 'удали корзину'])) return setStatusVoice('Корзины больше нет. Удаление выполняется сразу.', false);
+    if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) return setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false);
     if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали папку'])) {
       const folder = findFolderByText(data.folders, text) || (selectedFolder !== 'Все' ? { name: selectedFolder } : null);
       return folder ? clearFolderNow(folder.name) : setStatusVoice('Не понял, какую папку очистить.', false);
@@ -741,7 +806,7 @@ export default function App() {
     }
     if (plan.action === 'open_folder') { return plan.folder ? openFolder(plan.folder) : setStatusVoice('Не понял, какую папку открыть.'); }
     if (plan.action === 'delete_all') { clearNotebookNow(); return true; }
-    if (plan.action === 'delete_trash') { setStatusVoice('Корзины больше нет. Удаление выполняется сразу.', false); return true; }
+    if (plan.action === 'delete_trash') { setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false); return true; }
     if (plan.action === 'clear_folder') { plan.folder ? clearFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
     if (plan.action === 'delete_folder') { plan.folder ? clearFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
     if (plan.action === 'delete_note') {
@@ -755,6 +820,19 @@ export default function App() {
     }
     if (plan.action === 'share_current') { selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.'); return true; }
     if (plan.action === 'read_current') { selectedNote ? speak(shareText(selectedNote)) : setStatusVoice('Сначала откройте запись.'); return true; }
+    if (plan.action === 'read_contact_latest') {
+      const latestContact = [...data.notes]
+        .filter(note => note.folder === 'Контакты' || note.type === 'contact')
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      if (!latestContact) setStatusVoice('В папке Контакты пока нет записей.');
+      else {
+        openNote(latestContact);
+        speak(contactSpeechText(latestContact));
+        setSuggestedFolder('Контакты');
+        setStatus('');
+      }
+      return true;
+    }
     if (plan.action === 'read_folder_latest') {
       const latestInFolder = [...data.notes]
         .filter(note => note.folder === plan.folder)
@@ -802,6 +880,17 @@ export default function App() {
     if (intent === 'share') return selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
     if (intent === 'read') {
       const folderMatch = findFolderByText(data.folders, spoken);
+      if (folderMatch?.name === 'Контакты' || includesAny(spoken, ['номер', 'телефон', 'контакт'])) {
+        const latestContact = [...data.notes]
+          .filter(note => note.folder === 'Контакты' || note.type === 'contact')
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        if (!latestContact) return setStatusVoice('В папке Контакты пока нет записей.');
+        openNote(latestContact);
+        speak(contactSpeechText(latestContact));
+        setSuggestedFolder('Контакты');
+        setStatus('');
+        return;
+      }
       if (folderMatch) {
         const latestInFolder = [...data.notes]
           .filter(note => note.folder === folderMatch.name)
