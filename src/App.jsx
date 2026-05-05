@@ -123,9 +123,17 @@ function loadData() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return makeInitialData();
     const parsed = JSON.parse(raw);
+    const notes = Array.isArray(parsed.notes)
+      ? parsed.notes.filter(note => normalize(note?.folder || '') !== 'корзина')
+      : [];
+    const baseFolders = Array.isArray(parsed.folders) && parsed.folders.length ? parsed.folders : makeInitialData().folders;
+    const folders = baseFolders
+      .filter(folder => normalize(folder?.name || '') !== 'корзина')
+      .reduce((acc, folder) => ensureFolder(acc, folder.name), makeInitialData().folders);
+
     return {
-      folders: Array.isArray(parsed.folders) && parsed.folders.length ? parsed.folders : makeInitialData().folders,
-      notes: Array.isArray(parsed.notes) ? parsed.notes : []
+      folders,
+      notes
     };
   } catch {
     return makeInitialData();
