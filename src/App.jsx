@@ -550,6 +550,14 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [data]);
 
+  useEffect(() => {
+    if (!pending || !speechSupported || listening) return;
+    const timer = window.setTimeout(() => {
+      startListening();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [pending, speechSupported, listening]);
+
   const visibleNotes = useMemo(() => {
     let list = [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     if (selectedFolder !== 'Все') list = list.filter(n => n.folder === selectedFolder);
@@ -874,7 +882,7 @@ export default function App() {
               <button className="danger" onClick={confirmPending}>Подтвердить</button>
               <button onClick={cancelPending}>Отмена</button>
             </div>
-            <small>Голосом можно сказать: “да, удалить” или “отмена”.</small>
+            <small>Микрофон включается автоматически. Голосом можно сказать: “да удалить”, “подтвердить” или “отмена”.</small>
           </div>
         </div>
       )}
