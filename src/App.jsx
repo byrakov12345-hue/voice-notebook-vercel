@@ -187,7 +187,7 @@ function extractAppointmentDateLabel(text) {
 function cleanTitle(text, fallback = 'Заметка') {
   const value = String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|нужно|надо|мне|хочу)\s*/i, '')
-    .replace(/^(у меня идея|есть идея|идея|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
+    .replace(/^(у меня идея|есть идея|идея|идею|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
     .replace(/\s+и\s+(покажи|выведи|открой|прочитай).*$/i, '')
     .trim();
   return value ? capitalize(value.slice(0, 80)) : fallback;
@@ -203,7 +203,7 @@ function chooseFolder(text) {
   const explicit = extractExplicitFolder(text);
   if (explicit) return explicit;
   const source = normalize(text);
-  if (includesAny(source, ['идея', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'Идеи';
+  if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'Идеи';
   if (includesAny(source, ['стриж', 'встреч', 'прием', 'приём', 'барбер', 'парикмахер']) || hasDateOrTime(source)) return 'Встречи';
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'Покупки';
   if (includesAny(source, ['телефон', 'номер', 'контакт'])) return 'Контакты';
@@ -218,7 +218,7 @@ function chooseFolder(text) {
 
 function inferType(text) {
   const source = normalize(text);
-  if (includesAny(source, ['идея', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'idea';
+  if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'idea';
   if (includesAny(source, ['телефон', 'номер телефона', 'контакт'])) return 'contact';
   if (includesAny(source, ['комбинац', 'код', 'цифр', 'пароль'])) return 'code';
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'shopping_list';
@@ -392,7 +392,7 @@ function shareText(note) {
 function stripSaveWords(text) {
   return String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|мне|у меня|есть|нужно|надо|хочу)\s*/i, '')
-    .replace(/^(идея|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
+    .replace(/^(идея|идею|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
     .replace(/\s+и\s+(покажи|выведи|открой|прочитай).*$/i, '')
     .trim();
 }
