@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
-const STORAGE_KEY = 'smart_voice_notebook_live_v1';
+const STORAGE_KEY = 'smart_voice_notebook_live_v2';
+const LEGACY_STORAGE_KEYS = ['smart_voice_notebook_live_v1'];
 
 const DEFAULT_FOLDERS = [
   'Идеи', 'Встречи', 'Покупки', 'Задачи', 'Контакты', 'Коды и комбинации',
@@ -120,7 +121,7 @@ function makeInitialData() {
 
 function loadData() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || LEGACY_STORAGE_KEYS.map(key => localStorage.getItem(key)).find(Boolean);
     if (!raw) return makeInitialData();
     const parsed = JSON.parse(raw);
     const notes = Array.isArray(parsed.notes)
@@ -626,6 +627,7 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    LEGACY_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
   }, [data]);
 
   const visibleNotes = useMemo(() => {
