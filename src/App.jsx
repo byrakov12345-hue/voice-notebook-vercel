@@ -32,6 +32,32 @@ const FOLDER_SIGNALS = {
   Важное: ['важно', 'срочно', 'обязательно', 'не забыть', 'критично']
 };
 
+const FOLDER_STEMS = {
+  Идеи: ['иде', 'задум', 'концеп'],
+  Встречи: ['встреч', 'встрет', 'прием', 'приём', 'договор', 'созвон'],
+  Покупки: ['куп', 'магаз', 'продукт', 'заказ'],
+  Задачи: ['задач', 'сдела', 'выполн', 'провер', 'подготов'],
+  Контакты: ['контакт', 'телефон', 'номер', 'позвон', 'напис'],
+  'Коды и комбинации': ['код', 'парол', 'комбинац', 'пин'],
+  Расходы: ['потрат', 'расход', 'заплат', 'рубл', 'евро', 'доллар'],
+  Клиенты: ['клиент', 'заказч', 'лид', 'сделк', 'коммерч'],
+  Работа: ['работ', 'проект', 'бриф', 'дедлайн', 'заказ'],
+  Дом: ['дом', 'квартир', 'ремонт', 'кухн', 'ванн', 'мебел'],
+  Машина: ['машин', 'авто', 'мойк', 'бенз', 'масл', 'шин', 'гараж'],
+  Семья: ['сын', 'доч', 'мам', 'пап', 'жен', 'муж', 'сем', 'ребен', 'ребён', 'дет'],
+  Здоровье: ['здоров', 'таблет', 'лекар', 'анализ', 'температур', 'врач'],
+  'Учёба': ['учеб', 'учёб', 'урок', 'школ', 'универс', 'экзам', 'домашк'],
+  Важное: ['важ', 'сроч', 'обязат', 'критич']
+};
+
+const TOPIC_STOP_WORDS = new Set([
+  'мне', 'нужно', 'надо', 'над', 'хочу', 'хотел', 'хотела', 'запомни', 'запиши', 'сохрани',
+  'добавь', 'создай', 'про', 'для', 'чтобы', 'если', 'потом', 'сегодня', 'завтра',
+  'послезавтра', 'это', 'этот', 'эта', 'эту', 'мой', 'моя', 'мою', 'мои', 'наш', 'наша',
+  'нужно', 'нужно', 'с', 'со', 'в', 'во', 'на', 'по', 'о', 'об', 'от', 'до', 'к', 'ко',
+  'и', 'или', 'но', 'что', 'как', 'бы', 'уже', 'ещё', 'еще', 'надо', 'нужен', 'нужна', 'нужно'
+]);
+
 const digitWords = {
   ноль: '0', один: '1', одна: '1', два: '2', две: '2', три: '3', четыре: '4',
   пять: '5', шесть: '6', семь: '7', восемь: '8', девять: '9'
@@ -243,15 +269,49 @@ function resolveTimedEntryFolder(text) {
 
 function scoreFolderSignals(text) {
   const source = normalize(text);
+  const words = source.split(' ').filter(Boolean);
   const ranked = Object.entries(FOLDER_SIGNALS)
     .map(([folder, signals]) => ({
       folder,
-      score: signals.reduce((sum, signal) => sum + (source.includes(normalize(signal)) ? 1 : 0), 0)
+      score:
+        signals.reduce((sum, signal) => sum + (source.includes(normalize(signal)) ? 2 : 0), 0) +
+        (FOLDER_STEMS[folder] || []).reduce((sum, stem) => sum + words.reduce((inner, word) => inner + (word.includes(stem) ? 1 : 0), 0), 0)
     }))
     .filter(entry => entry.score > 0)
     .sort((a, b) => b.score - a.score);
 
   return ranked[0]?.folder || '';
+}
+
+function detectNovelFolderName(text) {
+  const source = normalize(text);
+  const afterTopicCue =
+    source.match(/(?:про|о|об|для)\s+([а-яa-z0-9-]+\s*[а-яa-z0-9-]*)/i)?.[1] ||
+    source.match(/(?:запомни|запиши|сохрани|добавь|нужно|надо|хочу)\s+([а-яa-z0-9-]+\s*[а-яa-z0-9-]*)/i)?.[1] ||
+    '';
+
+  const rawWords = (afterTopicCue || source)
+    .split(' ')
+    .map(word => word.replace(/[^a-zа-я0-9-]/gi, '').trim())
+    .filter(Boolean)
+    .filter(word => word.length > 3)
+    .filter(word => !TOPIC_STOP_WORDS.has(word));
+
+  const topicWords = rawWords.slice(0, 2);
+  if (!topicWords.length) return '';
+
+  const candidate = topicWords.map(capitalize).join(' ');
+  if (DEFAULT_FOLDERS.some(folder => normalize(folder) === normalize(candidate))) return '';
+  if (candidate.length < 4) return '';
+  return candidate;
+}
+
+function resolveFolderName(text, type = 'note') {
+  const chosen = chooseFolder(text);
+  if (chosen !== 'Разное') return chosen;
+  if (!['note', 'task'].includes(type)) return chosen;
+  const novel = detectNovelFolderName(text);
+  return novel || chosen;
 }
 
 function chooseFolder(text) {
@@ -316,7 +376,7 @@ function extractContact(text) {
 function createNoteFromLocalText(text) {
   const now = new Date().toISOString();
   const type = inferType(text);
-  const folder = chooseFolder(text);
+  const folder = resolveFolderName(text, type);
   const content = String(text || '').replace(/^(запомни|запиши|сохрани|добавь)\s*/i, '').trim();
   const tags = normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10);
 
@@ -393,7 +453,7 @@ function createNoteFromAI(plan, fallbackText) {
     return { id: uid('note'), type, folder: plan.folder || resolveTimedEntryFolder(plan.content || fallbackText), title: plan.title || cleanTitle(plan.content || fallbackText, 'Встреча'), content: plan.content || fallbackText, dateLabel: plan.dateLabel || extractAppointmentDateLabel(fallbackText), time: plan.time || extractAppointmentTime(fallbackText), tags: ['встреча', ...(plan.tags || [])], createdAt: now, updatedAt: now };
   }
 
-  return { id: uid('note'), type, folder: plan.folder || chooseFolder(fallbackText), title: plan.title || cleanTitle(plan.content || fallbackText, TYPE_LABELS[type] || 'Заметка'), content: plan.content || fallbackText, tags: Array.isArray(plan.tags) ? plan.tags : [], createdAt: now, updatedAt: now };
+  return { id: uid('note'), type, folder: plan.folder || resolveFolderName(fallbackText, type), title: plan.title || cleanTitle(plan.content || fallbackText, TYPE_LABELS[type] || 'Заметка'), content: plan.content || fallbackText, tags: Array.isArray(plan.tags) ? plan.tags : [], createdAt: now, updatedAt: now };
 }
 
 function detectIntent(text) {
@@ -570,9 +630,9 @@ function localAIPlan(text, data, currentNote) {
       return { action: 'save_idea', type, folder: 'Идеи', title: cleanTitle(content, 'Идея'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
     if (type === 'task') {
-      return { action: 'save_task', type, folder: chooseFolder(content || text), title: cleanTitle(content, 'Задача'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
+      return { action: 'save_task', type, folder: resolveFolderName(content || text, type), title: cleanTitle(content, 'Задача'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
-    return { action: 'save_note', type: 'note', folder, title: cleanTitle(content, 'Заметка'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
+    return { action: 'save_note', type: 'note', folder: resolveFolderName(content || text, 'note'), title: cleanTitle(content, 'Заметка'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
   }
 
   return { action: 'unknown', type: 'unknown' };
