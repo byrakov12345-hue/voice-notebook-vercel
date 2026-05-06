@@ -504,7 +504,7 @@ function localAIPlan(text, data, currentNote) {
     if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) {
       return { action: 'delete_trash', target: 'trash' };
     }
-    if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'очисти блокнот'])) {
+    if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'удали все с блокнота', 'удали всё с блокнота', 'очисти блокнот', 'очисти весь блокнот'])) {
       return { action: 'delete_all', target: 'all' };
     }
     if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали папку'])) {
@@ -770,7 +770,7 @@ export default function App() {
 
   function handleDelete(text) {
     const source = normalize(text);
-    if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'очисти блокнот'])) return clearNotebookNow();
+    if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'удали все с блокнота', 'удали всё с блокнота', 'очисти блокнот', 'очисти весь блокнот'])) return clearNotebookNow();
     if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) return setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false);
     if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали папку'])) {
       const folder = findFolderByText(data.folders, text) || (selectedFolder !== 'Все' ? { name: selectedFolder } : null);
