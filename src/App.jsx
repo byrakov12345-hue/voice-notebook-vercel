@@ -306,11 +306,30 @@ function resolveExplicitFolderName(rawName) {
 function extractExplicitFolder(text) {
   const source = normalize(text);
   const markers = ['в папку ', 'в раздел ', 'в категорию ', 'создай папку ', 'создать папку '];
+  const storedFolders = (() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY) || LEGACY_STORAGE_KEYS.map(key => localStorage.getItem(key)).find(Boolean);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Array.isArray(parsed?.folders) ? parsed.folders.map(folder => folder?.name).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  })();
+  const knownFolders = [...new Set([...storedFolders, ...DEFAULT_FOLDERS])];
+
   for (const marker of markers) {
     const index = source.indexOf(marker);
     if (index === -1) continue;
     const tail = source.slice(index + marker.length).trim();
     if (!tail) continue;
+    const matchedKnownFolder = [...knownFolders]
+      .sort((a, b) => normalize(b).length - normalize(a).length)
+      .find(folder => {
+        const normalizedFolder = normalize(folder);
+        return tail === normalizedFolder || tail.startsWith(`${normalizedFolder} `);
+      });
+    if (matchedKnownFolder) return matchedKnownFolder;
     const folderPart = tail
       .split(/\s+(?=что\b|чтобы\b|про\b|и\b|но\b|а\b|мне\b|нужно\b|надо\b|завтра\b|сегодня\b|послезавтра\b)/i)[0]
       .trim();
