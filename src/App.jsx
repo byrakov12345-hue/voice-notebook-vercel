@@ -464,6 +464,28 @@ function extractItems(text) {
     .filter(Boolean);
 }
 
+function deriveShoppingListTitle(items, text = '') {
+  const normalizedItems = (items || []).map(item => normalize(item)).filter(Boolean);
+  const source = normalize([text, ...normalizedItems].join(' '));
+
+  const groups = [
+    { title: 'Еда', signals: ['хлеб', 'сахар', 'молоко', 'сыр', 'мяс', 'куриц', 'овощ', 'фрукт', 'еда', 'продукт', 'чай', 'кофе', 'круп', 'макарон'] },
+    { title: 'Транспорт', signals: ['мотоцикл', 'велосипед', 'самокат', 'машин', 'авто', 'транспорт', 'скутер'] },
+    { title: 'Запчасти', signals: ['втулк', 'шина', 'колес', 'подшип', 'масл', 'фильтр', 'чехл', 'запчаст', 'свеч'] },
+    { title: 'Дом', signals: ['ламп', 'мебел', 'посуда', 'подушк', 'ремонт', 'дом', 'квартир'] },
+    { title: 'Одежда', signals: ['куртк', 'обув', 'футбол', 'джинс', 'носк', 'штан', 'одежд'] },
+    { title: 'Техника', signals: ['телефон', 'ноутбук', 'планшет', 'кабель', 'зарядк', 'наушник', 'мышк'] },
+    { title: 'Здоровье', signals: ['лекар', 'таблет', 'витамин', 'бинт', 'градусник', 'здоров'] }
+  ];
+
+  const matched = groups.find(group => group.signals.some(signal => source.includes(signal)));
+  if (matched) return matched.title;
+
+  const firstMeaningful = normalizedItems[0];
+  if (firstMeaningful) return capitalize(firstMeaningful.slice(0, 1).toUpperCase() + firstMeaningful.slice(1));
+  return 'Покупки';
+}
+
 function extractContact(text) {
   const phone = extractPhone(text);
   let rest = String(text || '')
@@ -498,7 +520,7 @@ function createNoteFromLocalText(text) {
   if (type === 'shopping_list') {
     const items = extractItems(content);
     return {
-      id: uid('note'), type, folder, title: 'Список покупок', content: items.join(', '),
+      id: uid('note'), type, folder, title: deriveShoppingListTitle(items, content), content: items.join(', '),
       items, checkedItems: [], tags: ['покупки', 'магазин', ...items], createdAt: now, updatedAt: now
     };
   }
@@ -548,7 +570,7 @@ function createNoteFromAI(plan, fallbackText) {
 
   if (type === 'shopping_list') {
     const items = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || fallbackText);
-    return { id: uid('note'), type, folder: plan.folder || 'Покупки', title: plan.title || 'Список покупок', content: items.join(', '), items, checkedItems: [], tags: ['покупки', 'магазин', ...items, ...(plan.tags || [])], createdAt: now, updatedAt: now };
+    return { id: uid('note'), type, folder: plan.folder || 'Покупки', title: plan.title || deriveShoppingListTitle(items, plan.content || fallbackText), content: items.join(', '), items, checkedItems: [], tags: ['покупки', 'магазин', ...items, ...(plan.tags || [])], createdAt: now, updatedAt: now };
   }
 
   if (type === 'code') {
@@ -1331,7 +1353,10 @@ export default function App() {
                         className={selectedId === note.id ? 'folder-note-item active' : 'folder-note-item'}
                         onClick={() => openNote(note)}
                       >
-                        <span className="folder-note-title">{note.title}</span>
+                        <div className="folder-note-copy">
+                          <span className="folder-note-title">{note.title}</span>
+                          {note.type === 'shopping_list' ? <small className="folder-note-preview">{(note.items || []).join(', ')}</small> : null}
+                        </div>
                         <small>{formatDate(note.createdAt)}</small>
                       </button>
                     )) : <div className="folder-note-empty">В этой папке пока нет записей</div>}

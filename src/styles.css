@@ -61,7 +61,9 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .folder-notes { margin: 8px 0 0 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.12); display: grid; gap: 6px; }
 .folder-note-item { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 14px; background: rgba(15,23,42,0.58); padding: 10px 12px; }
 .folder-note-item.active { background: rgba(248,250,252,0.18); border: 1px solid rgba(248,250,252,0.25); }
+.folder-note-copy { min-width: 0; display: grid; gap: 2px; }
 .folder-note-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-note-preview { color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-note-item small { color: #94a3b8; white-space: nowrap; }
 .folder-note-empty { color: #94a3b8; padding: 8px 4px; font-size: 14px; }
 .folder-tools { display: grid; gap: 8px; margin-top: 12px; }
