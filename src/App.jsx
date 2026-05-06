@@ -501,6 +501,11 @@ function deriveShoppingListTitle(items, text = '') {
   return 'Покупки';
 }
 
+function isShoppingAppendCommand(text) {
+  const source = normalize(text);
+  return includesAny(source, ['добавь', 'еще', 'ещё']) && inferType(text) === 'shopping_list';
+}
+
 function extractContact(text) {
   const phone = extractPhone(text);
   let rest = String(text || '')
@@ -1017,6 +1022,38 @@ export default function App() {
     setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
   }
 
+  function appendToLatestShoppingList(folderName, items, rawText = '') {
+    if (!folderName || !items?.length) return false;
+    const latestList = [...data.notes]
+      .filter(note => note.folder === folderName && note.type === 'shopping_list')
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    if (!latestList) return false;
+
+    const mergedItems = [...new Set([...(latestList.items || []), ...items].map(item => String(item || '').trim()).filter(Boolean))];
+    const mergedTitle = latestList.title && latestList.title !== 'Покупки'
+      ? latestList.title
+      : deriveShoppingListTitle(mergedItems, rawText || mergedItems.join(', '));
+
+    setData(prev => ({
+      ...prev,
+      notes: prev.notes.map(note => note.id === latestList.id
+        ? {
+          ...note,
+          title: mergedTitle,
+          items: mergedItems,
+          content: mergedItems.join(', '),
+          updatedAt: new Date().toISOString(),
+          tags: [...new Set(['покупки', 'магазин', ...mergedItems])]
+        }
+        : note)
+    }));
+    setSelectedId(latestList.id);
+    setSelectedFolder(folderName);
+    setSuggestedFolder('');
+    setStatusVoice(`Добавлено в список ${mergedTitle}.`, false);
+    return true;
+  }
+
   function openNote(note) {
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
@@ -1112,6 +1149,10 @@ export default function App() {
 
   async function executePlan(plan, originalText) {
     if (!plan?.action || plan.action === 'unknown') return false;
+    if (plan.action === 'save_shopping_list' && isShoppingAppendCommand(originalText)) {
+      const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
+      if (appendToLatestShoppingList(plan.folder || resolveFolderName(originalText, 'shopping_list'), appendItems, originalText)) return true;
+    }
     if (plan.action.startsWith('save_')) {
       const note = createNoteFromAI(plan, originalText);
       saveNote(note, Boolean(plan.showAfterSave || includesAny(originalText, ['выведи', 'покажи', 'открой', 'на экран'])));
@@ -1210,7 +1251,14 @@ export default function App() {
     }
 
     const intent = detectIntent(spoken);
-    if (intent === 'save') return saveNote(createNoteFromLocalText(spoken), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
+    if (intent === 'save') {
+      if (isShoppingAppendCommand(spoken)) {
+        const targetFolder = resolveFolderName(spoken, 'shopping_list');
+        const items = extractItems(spoken);
+        if (appendToLatestShoppingList(targetFolder, items, spoken)) return;
+      }
+      return saveNote(createNoteFromLocalText(spoken), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
+    }
     if (intent === 'search') return performSearch(spoken);
     if (intent === 'show_latest') return showLatest(spoken);
     if (intent === 'delete') return handleDelete(spoken);
