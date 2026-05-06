@@ -16,7 +16,7 @@ const TYPE_LABELS = {
 
 const FOLDER_SIGNALS = {
   Идеи: ['идея', 'идею', 'придумал', 'придумала', 'задумка', 'концепт'],
-  Встречи: ['встреча', 'встречи', 'прием', 'приём', 'запись', 'стрижка', 'врач', 'барбер', 'парикмахер'],
+  Встречи: ['встреча', 'встречи', 'встрет', 'прием', 'приём', 'запись', 'стрижка', 'врач', 'барбер', 'парикмахер', 'договорились'],
   Покупки: ['купить', 'покупка', 'покупки', 'магазин', 'продукты', 'список покупок', 'заказать'],
   Задачи: ['задача', 'сделать', 'выполнить', 'нужно', 'надо', 'проверить', 'подготовить'],
   Контакты: ['контакт', 'номер', 'телефон', 'позвонить', 'написать'],
@@ -263,7 +263,7 @@ function chooseFolder(text) {
   if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'Расходы';
   const scoredFolder = scoreFolderSignals(source);
   if (scoredFolder) return scoredFolder;
-  if (includesAny(source, ['стриж', 'встреч', 'прием', 'приём', 'барбер', 'парикмахер']) || hasDateOrTime(source)) return 'Встречи';
+  if (includesAny(source, ['стриж', 'встреч', 'встрет', 'прием', 'приём', 'барбер', 'парикмахер', 'договорились']) || hasDateOrTime(source)) return 'Встречи';
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'Покупки';
   if (includesAny(source, ['телефон', 'номер', 'контакт'])) return 'Контакты';
   if (includesAny(source, ['код', 'комбинац', 'цифр', 'пароль'])) return 'Коды и комбинации';
@@ -283,7 +283,7 @@ function inferType(text) {
   if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'shopping_list';
   if (includesAny(source, ['клиент']) && includesAny(source, ['просил', 'нужно', 'надо', 'позвонить', 'написать', 'связаться', 'перезвонить'])) return 'task';
   if (isFamilyContext(source) && (includesAny(source, ['нужно', 'надо', 'сказать', 'напомнить']) || hasDateOrTime(source))) return 'task';
-  if (includesAny(source, ['стриж', 'прием', 'приём', 'встреч', 'барбер', 'парикмахер']) || hasDateOrTime(source)) return 'appointment';
+  if (includesAny(source, ['стриж', 'прием', 'приём', 'встреч', 'встрет', 'барбер', 'парикмахер', 'договорились']) || hasDateOrTime(source)) return 'appointment';
   if (includesAny(source, ['задача', 'надо', 'нужно', 'сделать'])) return 'task';
   return 'note';
 }
@@ -411,7 +411,7 @@ function detectIntent(text) {
   if (includesAny(source, ['у меня идея', 'есть идея'])) return 'save';
   if (includesAny(source, ['мне нужно', 'мне надо', 'надо', 'нужно', 'хочу'])) return 'save';
   if (inferType(text) !== 'note') return 'save';
-  if (hasDateOrTime(source) || includesAny(source, ['на стрижку', 'к врачу', 'на прием', 'на приём', 'встреча'])) return 'save';
+  if (hasDateOrTime(source) || includesAny(source, ['на стрижку', 'к врачу', 'на прием', 'на приём', 'встреча', 'встретиться', 'встретится'])) return 'save';
   return 'unknown';
 }
 
