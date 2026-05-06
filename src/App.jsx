@@ -798,6 +798,7 @@ export default function App() {
   const [status, setStatus] = useState('Готов. Нажмите микрофон или введите команду для теста.');
   const [listening, setListening] = useState(false);
   const [suggestedFolder, setSuggestedFolder] = useState('');
+  const [expandedFolders, setExpandedFolders] = useState({});
   const useAI = true;
   const recognitionRef = useRef(null);
   const lastCommandRef = useRef({ text: '', at: 0 });
@@ -829,6 +830,10 @@ export default function App() {
     setQuery('');
     setSuggestedFolder('');
     setStatusVoice(`Открыта папка ${folderName}.`, voice);
+  }
+
+  function toggleFolderExpand(folderName) {
+    setExpandedFolders(prev => ({ ...prev, [folderName]: !prev[folderName] }));
   }
 
   function deleteNoteNow(note) {
@@ -1185,8 +1190,42 @@ export default function App() {
           <h2>Папки</h2>
           <button className={selectedFolder === 'Все' ? 'folder active' : 'folder'} onClick={() => setSelectedFolder('Все')}>Все записи <span>{data.notes.length}</span></button>
           {data.folders.map(folder => {
-            const count = data.notes.filter(n => n.folder === folder.name).length;
-            return <button key={folder.id} className={selectedFolder === folder.name ? 'folder active' : 'folder'} onClick={() => setSelectedFolder(folder.name)}>{folder.name}<span>{count}</span></button>;
+            const folderNotes = [...data.notes]
+              .filter(n => n.folder === folder.name)
+              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const count = folderNotes.length;
+            const expanded = Boolean(expandedFolders[folder.name]);
+            return (
+              <div key={folder.id} className="folder-block">
+                <div className={selectedFolder === folder.name ? 'folder-row active' : 'folder-row'}>
+                  <button className={selectedFolder === folder.name ? 'folder folder-trigger active' : 'folder folder-trigger'} onClick={() => setSelectedFolder(folder.name)}>
+                    {folder.name}
+                    <span>{count}</span>
+                  </button>
+                  <button
+                    className="folder-expand"
+                    onClick={() => toggleFolderExpand(folder.name)}
+                    aria-label={expanded ? `Свернуть папку ${folder.name}` : `Развернуть папку ${folder.name}`}
+                  >
+                    {expanded ? '−' : '+'}
+                  </button>
+                </div>
+                {expanded ? (
+                  <div className="folder-notes">
+                    {folderNotes.length ? folderNotes.map(note => (
+                      <button
+                        key={note.id}
+                        className={selectedId === note.id ? 'folder-note-item active' : 'folder-note-item'}
+                        onClick={() => openNote(note)}
+                      >
+                        <span className="folder-note-title">{note.title}</span>
+                        <small>{formatDate(note.createdAt)}</small>
+                      </button>
+                    )) : <div className="folder-note-empty">В этой папке пока нет записей</div>}
+                  </div>
+                ) : null}
+              </div>
+            );
           })}
           <div className="folder-tools">
             <button

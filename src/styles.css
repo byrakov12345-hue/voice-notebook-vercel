@@ -42,6 +42,17 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .folder { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; text-align: left; border-radius: 18px; background: rgba(15,23,42,0.78); }
 .folder.active { background: #f8fafc; color: #020617; font-weight: 800; }
 .folder span { opacity: .75; }
+.folder-block { margin-bottom: 8px; }
+.folder-row { display: grid; grid-template-columns: minmax(0,1fr) 44px; gap: 8px; align-items: stretch; }
+.folder-row.active .folder-expand { background: #f8fafc; color: #020617; }
+.folder-trigger { margin-bottom: 0; }
+.folder-expand { border-radius: 16px; background: rgba(15,23,42,0.78); font-size: 24px; line-height: 1; padding: 0; min-height: 44px; }
+.folder-notes { margin: 8px 0 0 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.12); display: grid; gap: 6px; }
+.folder-note-item { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 14px; background: rgba(15,23,42,0.58); padding: 10px 12px; }
+.folder-note-item.active { background: rgba(248,250,252,0.18); border: 1px solid rgba(248,250,252,0.25); }
+.folder-note-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-note-item small { color: #94a3b8; white-space: nowrap; }
+.folder-note-empty { color: #94a3b8; padding: 8px 4px; font-size: 14px; }
 .folder-tools { display: grid; gap: 8px; margin-top: 12px; }
 .notes-head { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 14px; }
 .notes-head h2 { margin-bottom: 2px; }
