@@ -686,9 +686,13 @@ function localAIPlan(text, data, currentNote) {
     if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'удали все с блокнота', 'удали всё с блокнота', 'очисти блокнот', 'очисти весь блокнот'])) {
       return { action: 'delete_all', target: 'all' };
     }
-    if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали папку'])) {
+    if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали всё в папке', 'удали все с папки', 'удали всё с папки'])) {
       const folderMatch = findFolderByText(data.folders, text);
       return { action: 'clear_folder', folder: folderMatch?.name || '', target: 'folder' };
+    }
+    if (includesAny(source, ['удали папку'])) {
+      const folderMatch = findFolderByText(data.folders, text);
+      return { action: 'delete_folder', folder: folderMatch?.name || '', target: 'folder' };
     }
     if (source.includes('послед') && source.includes('папк')) {
       const folderMatch = findFolderByText(data.folders, text);
@@ -853,6 +857,24 @@ export default function App() {
     setStatusVoice(`Папка ${folderName} очищена.`, false);
   }
 
+  function deleteFolderNow(folderName) {
+    if (!folderName || folderName === 'Все') return setStatusVoice('Не понял, какую папку удалить.', false);
+    const exists = data.folders.some(folder => folder.name === folderName);
+    if (!exists) return setStatusVoice(`Папка ${folderName} не найдена.`, false);
+    setData(prev => ({
+      folders: prev.folders.filter(folder => folder.name !== folderName),
+      notes: prev.notes.filter(note => note.folder !== folderName)
+    }));
+    setExpandedFolders(prev => {
+      const next = { ...prev };
+      delete next[folderName];
+      return next;
+    });
+    setSelectedId(null);
+    setSelectedFolder('Все');
+    setStatusVoice(`Папка ${folderName} удалена.`, false);
+  }
+
   function clearNotebookNow() {
     if (!data.notes.length) return setStatusVoice('Блокнот уже пуст.', false);
     setData(prev => ({ ...prev, notes: [] }));
@@ -957,9 +979,13 @@ export default function App() {
     const source = normalize(text);
     if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'удали все с блокнота', 'удали всё с блокнота', 'очисти блокнот', 'очисти весь блокнот'])) return clearNotebookNow();
     if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) return setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false);
-    if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали папку'])) {
+    if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали всё в папке', 'удали все с папки', 'удали всё с папки'])) {
       const folder = findFolderByText(data.folders, text) || (selectedFolder !== 'Все' ? { name: selectedFolder } : null);
       return folder ? clearFolderNow(folder.name) : setStatusVoice('Не понял, какую папку очистить.', false);
+    }
+    if (includesAny(source, ['удали папку'])) {
+      const folder = findFolderByText(data.folders, text);
+      return folder ? deleteFolderNow(folder.name) : setStatusVoice('Не понял, какую папку удалить.', false);
     }
     if (source.includes('папк')) {
       const folder = findFolderByText(data.folders, text);
@@ -1003,7 +1029,7 @@ export default function App() {
     if (plan.action === 'delete_all') { clearNotebookNow(); return true; }
     if (plan.action === 'delete_trash') { setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false); return true; }
     if (plan.action === 'clear_folder') { plan.folder ? clearFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
-    if (plan.action === 'delete_folder') { plan.folder ? clearFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
+    if (plan.action === 'delete_folder') { plan.folder ? deleteFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
     if (plan.action === 'delete_note') {
       const found =
         plan.target === 'current' ? selectedNote
