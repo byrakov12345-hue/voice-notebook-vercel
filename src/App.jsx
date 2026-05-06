@@ -249,16 +249,64 @@ function extractAppointmentDateLabel(text) {
 function cleanTitle(text, fallback = 'Заметка') {
   const value = String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|нужно|надо|мне|хочу)\s*/i, '')
+    .replace(/^(?:в папку|в раздел|в категорию)\s+[а-яa-z0-9-]+\s*/i, '')
     .replace(/^(у меня идея|есть идея|идея|идею|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
     .replace(/\s+и\s+(покажи|выведи|открой|прочитай).*$/i, '')
     .trim();
   return value ? capitalize(value.slice(0, 80)) : fallback;
 }
 
+function resolveExplicitFolderName(rawName) {
+  const clean = normalize(rawName).replace(/[^a-zа-я0-9 -]/gi, '').trim();
+  if (!clean) return '';
+
+  const exact = DEFAULT_FOLDERS.find(folder => normalize(folder) === clean);
+  if (exact) return exact;
+
+  const softVariants = {
+    важно: 'Важное',
+    важное: 'Важное',
+    встреча: 'Встречи',
+    встречи: 'Встречи',
+    задача: 'Задачи',
+    задачи: 'Задачи',
+    покупка: 'Покупки',
+    покупки: 'Покупки',
+    контакт: 'Контакты',
+    контакты: 'Контакты',
+    код: 'Коды и комбинации',
+    коды: 'Коды и комбинации',
+    клиент: 'Клиенты',
+    клиенты: 'Клиенты',
+    расход: 'Расходы',
+    расходы: 'Расходы',
+    работа: 'Работа',
+    дом: 'Дом',
+    машина: 'Машина',
+    семья: 'Семья',
+    здоровье: 'Здоровье',
+    учеба: 'Учёба',
+    учёба: 'Учёба',
+    идея: 'Идеи',
+    идеи: 'Идеи',
+    разное: 'Разное'
+  };
+
+  if (softVariants[clean]) return softVariants[clean];
+
+  const prefixMatch = DEFAULT_FOLDERS.find(folder => {
+    const normalizedFolder = normalize(folder);
+    return normalizedFolder.startsWith(clean) || clean.startsWith(normalizedFolder.slice(0, Math.max(3, normalizedFolder.length - 2)));
+  });
+  if (prefixMatch) return prefixMatch;
+
+  return capitalize(rawName);
+}
+
 function extractExplicitFolder(text) {
   const source = normalize(text);
   const match = source.match(/(?:в папку|в раздел|в категорию|создай папку|создать папку)\s+(.+?)(?:\s+и\s+|$)/);
-  return match?.[1] ? capitalize(match[1]) : '';
+  return match?.[1] ? resolveExplicitFolderName(match[1]) : '';
 }
 
 function isFamilyContext(text) {
@@ -579,6 +627,7 @@ function isSameOrNearDuplicate(existing, incoming) {
 function stripSaveWords(text) {
   return String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|мне|у меня|есть|нужно|надо|хочу)\s*/i, '')
+    .replace(/^(?:в папку|в раздел|в категорию)\s+[а-яa-z0-9-]+\s*/i, '')
     .replace(/^(идея|идею|задача|заметка|список покупок|номер телефона|комбинация цифр)[:\s-]*/i, '')
     .replace(/\s+и\s+(покажи|выведи|открой|прочитай).*$/i, '')
     .replace(/^что\s+/i, '')
