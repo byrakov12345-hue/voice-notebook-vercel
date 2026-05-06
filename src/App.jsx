@@ -58,6 +58,12 @@ const TOPIC_STOP_WORDS = new Set([
   'и', 'или', 'но', 'что', 'как', 'бы', 'уже', 'ещё', 'еще', 'надо', 'нужен', 'нужна', 'нужно'
 ]);
 
+const DEDUPE_STOP_WORDS = new Set([
+  ...TOPIC_STOP_WORDS,
+  'запись', 'заметка', 'папка', 'папку', 'папке', 'последнюю', 'последняя', 'последний',
+  'сохрани', 'запомни', 'запиши', 'добавь', 'сегодня', 'завтра', 'весь', 'вся', 'все', 'всё'
+]);
+
 const digitWords = {
   ноль: '0', один: '1', одна: '1', два: '2', две: '2', три: '3', четыре: '4',
   пять: '5', шесть: '6', семь: '7', восемь: '8', девять: '9'
@@ -529,6 +535,24 @@ function noteSignature(note) {
   });
 }
 
+function canonicalNoteText(note) {
+  return normalize([note?.title || '', note?.content || '', note?.name || '', note?.description || '', ...(note?.items || [])].join(' '))
+    .split(' ')
+    .map(word => word.replace(/[^a-zа-я0-9-]/gi, '').trim())
+    .filter(Boolean)
+    .filter(word => word.length > 2)
+    .filter(word => !DEDUPE_STOP_WORDS.has(word))
+    .join(' ');
+}
+
+function tokenOverlapRatio(a, b) {
+  const left = [...new Set(String(a || '').split(' ').filter(Boolean))];
+  const right = new Set(String(b || '').split(' ').filter(Boolean));
+  if (!left.length || !right.size) return 0;
+  const intersection = left.filter(token => right.has(token)).length;
+  return intersection / Math.max(left.length, right.size);
+}
+
 function isSameOrNearDuplicate(existing, incoming) {
   if (!existing || !incoming) return false;
   if (noteSignature(existing) === noteSignature(incoming)) return true;
@@ -539,8 +563,17 @@ function isSameOrNearDuplicate(existing, incoming) {
   const sameContent = normalize(existing.content) === normalize(incoming.content);
   const samePhone = String(existing.phone || '') !== '' && String(existing.phone || '') === String(incoming.phone || '');
   const sameItems = JSON.stringify((existing.items || []).map(item => normalize(item)).sort()) === JSON.stringify((incoming.items || []).map(item => normalize(item)).sort());
+  const canonicalExisting = canonicalNoteText(existing);
+  const canonicalIncoming = canonicalNoteText(incoming);
+  const overlap = tokenOverlapRatio(canonicalExisting, canonicalIncoming);
+  const containsSameMeaning =
+    canonicalExisting && canonicalIncoming &&
+    (canonicalExisting === canonicalIncoming ||
+      canonicalExisting.includes(canonicalIncoming) ||
+      canonicalIncoming.includes(canonicalExisting) ||
+      overlap >= 0.72);
 
-  return sameFolder && sameType && ((sameTitle && sameContent) || samePhone || sameItems);
+  return sameFolder && sameType && ((sameTitle && sameContent) || samePhone || sameItems || containsSameMeaning);
 }
 
 function stripSaveWords(text) {
