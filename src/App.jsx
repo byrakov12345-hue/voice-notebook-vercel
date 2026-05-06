@@ -305,8 +305,18 @@ function resolveExplicitFolderName(rawName) {
 
 function extractExplicitFolder(text) {
   const source = normalize(text);
-  const match = source.match(/(?:в папку|в раздел|в категорию|создай папку|создать папку)\s+([а-яa-z0-9-]+(?:\s+[а-яa-z0-9-]+)?)(?=\s+(?:что|чтобы|про|и|но|а|мне|нужно|надо|завтра|сегодня|послезавтра)\b|$)/);
-  return match?.[1] ? resolveExplicitFolderName(match[1]) : '';
+  const markers = ['в папку ', 'в раздел ', 'в категорию ', 'создай папку ', 'создать папку '];
+  for (const marker of markers) {
+    const index = source.indexOf(marker);
+    if (index === -1) continue;
+    const tail = source.slice(index + marker.length).trim();
+    if (!tail) continue;
+    const folderPart = tail
+      .split(/\s+(?=что\b|чтобы\b|про\b|и\b|но\b|а\b|мне\b|нужно\b|надо\b|завтра\b|сегодня\b|послезавтра\b)/i)[0]
+      .trim();
+    if (folderPart) return resolveExplicitFolderName(folderPart);
+  }
+  return '';
 }
 
 function isFamilyContext(text) {
