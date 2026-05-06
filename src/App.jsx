@@ -477,7 +477,7 @@ function createNoteFromLocalText(text) {
     else if (normalize(content).includes('врач')) title = 'Врач';
     else title = cleanTitle(content, 'Встреча');
     return {
-      id: uid('note'), type, folder: resolveTimedEntryFolder(content), title, content,
+      id: uid('note'), type, folder, title, content,
       dateLabel, time, tags: ['встреча', dateLabel, time, ...tags].filter(Boolean), createdAt: now, updatedAt: now
     };
   }
@@ -514,7 +514,7 @@ function createNoteFromAI(plan, fallbackText) {
   }
 
   if (type === 'appointment') {
-    return { id: uid('note'), type, folder: plan.folder || resolveTimedEntryFolder(plan.content || fallbackText), title: plan.title || cleanTitle(plan.content || fallbackText, 'Встреча'), content: plan.content || fallbackText, dateLabel: plan.dateLabel || extractAppointmentDateLabel(fallbackText), time: plan.time || extractAppointmentTime(fallbackText), tags: ['встреча', ...(plan.tags || [])], createdAt: now, updatedAt: now };
+    return { id: uid('note'), type, folder: plan.folder || resolveFolderName(fallbackText, type), title: plan.title || cleanTitle(plan.content || fallbackText, 'Встреча'), content: plan.content || fallbackText, dateLabel: plan.dateLabel || extractAppointmentDateLabel(fallbackText), time: plan.time || extractAppointmentTime(fallbackText), tags: ['встреча', ...(plan.tags || [])], createdAt: now, updatedAt: now };
   }
 
   return { id: uid('note'), type, folder: plan.folder || resolveFolderName(fallbackText, type), title: plan.title || cleanTitle(plan.content || fallbackText, TYPE_LABELS[type] || 'Заметка'), content: plan.content || fallbackText, tags: Array.isArray(plan.tags) ? plan.tags : [], createdAt: now, updatedAt: now };
@@ -716,7 +716,7 @@ function localAIPlan(text, data, currentNote) {
       let title = cleanTitle(content, 'Встреча');
       if (source.includes('стриж')) title = 'Стрижка';
       else if (source.includes('врач')) title = 'Врач';
-      return { action: 'save_appointment', type, folder: resolveTimedEntryFolder(content), title, content, dateLabel: appointmentDate, time: appointmentTime, tags: ['встреча', appointmentDate, appointmentTime].filter(Boolean), showAfterSave };
+      return { action: 'save_appointment', type, folder: resolveFolderName(text, type), title, content, dateLabel: appointmentDate, time: appointmentTime, tags: ['встреча', appointmentDate, appointmentTime].filter(Boolean), showAfterSave };
     }
     if (type === 'idea') {
       return { action: 'save_idea', type, folder: 'Идеи', title: cleanTitle(content, 'Идея'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
