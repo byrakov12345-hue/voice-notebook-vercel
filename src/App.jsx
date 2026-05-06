@@ -1289,13 +1289,22 @@ export default function App() {
                     {folder.name}
                     <span>{count}</span>
                   </button>
-                  <button
-                    className="folder-expand"
-                    onClick={() => toggleFolderExpand(folder.name)}
-                    aria-label={expanded ? `Свернуть папку ${folder.name}` : `Развернуть папку ${folder.name}`}
-                  >
-                    {expanded ? '−' : '+'}
-                  </button>
+                  <div className="folder-controls">
+                    <button
+                      className="folder-expand"
+                      onClick={() => toggleFolderExpand(folder.name)}
+                      aria-label={expanded ? `Свернуть папку ${folder.name}` : `Развернуть папку ${folder.name}`}
+                    >
+                      {expanded ? '−' : '+'}
+                    </button>
+                    <button
+                      className="folder-delete"
+                      onClick={() => deleteFolderNow(folder.name)}
+                      aria-label={`Удалить папку ${folder.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
                 {expanded ? (
                   <div className="folder-notes">
