@@ -305,7 +305,7 @@ function resolveExplicitFolderName(rawName) {
 
 function extractExplicitFolder(text) {
   const source = normalize(text);
-  const match = source.match(/(?:в папку|в раздел|в категорию|создай папку|создать папку)\s+(.+?)(?:\s+и\s+|$)/);
+  const match = source.match(/(?:в папку|в раздел|в категорию|создай папку|создать папку)\s+([а-яa-z0-9-]+(?:\s+[а-яa-z0-9-]+)?)(?=\s+(?:что|чтобы|про|и|но|а|мне|нужно|надо|завтра|сегодня|послезавтра)\b|$)/);
   return match?.[1] ? resolveExplicitFolderName(match[1]) : '';
 }
 
@@ -712,9 +712,9 @@ function localAIPlan(text, data, currentNote) {
       return { action: 'save_idea', type, folder: 'Идеи', title: cleanTitle(content, 'Идея'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
     if (type === 'task') {
-      return { action: 'save_task', type, folder: resolveFolderName(content || text, type), title: cleanTitle(content, 'Задача'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
+      return { action: 'save_task', type, folder: resolveFolderName(text, type), title: cleanTitle(content, 'Задача'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
-    return { action: 'save_note', type: 'note', folder: resolveFolderName(content || text, 'note'), title: cleanTitle(content, 'Заметка'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
+    return { action: 'save_note', type: 'note', folder: resolveFolderName(text, 'note'), title: cleanTitle(content, 'Заметка'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
   }
 
   return { action: 'unknown', type: 'unknown' };
