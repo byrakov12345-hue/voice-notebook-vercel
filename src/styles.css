@@ -15,7 +15,6 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .app-shell { max-width: 1500px; margin: 0 auto; padding: 20px; }
 .hero { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px; border: 1px solid rgba(255,255,255,0.1); border-radius: 28px; background: rgba(255,255,255,0.08); box-shadow: 0 24px 80px rgba(0,0,0,0.35); }
 .hero h1 { margin: 0; font-size: clamp(30px, 5vw, 58px); line-height: 1; letter-spacing: -0.05em; }
-.hero p { margin: 12px 0 0; color: #cbd5e1; font-size: 18px; }
 .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .icon-button { width: 54px; min-width: 54px; min-height: 54px; padding: 0; font-size: 24px; }
 
@@ -62,12 +61,18 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .folder-expand { border-radius: 16px; background: rgba(15,23,42,0.78); font-size: 24px; line-height: 1; padding: 0; min-height: 44px; }
 .folder-delete { border-radius: 16px; background: rgba(127,29,29,0.85); color: #fff; font-size: 26px; line-height: 1; padding: 0; min-height: 44px; }
 .folder-notes { margin: 8px 0 0 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.12); display: grid; gap: 6px; }
-.folder-note-item { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 14px; background: rgba(15,23,42,0.58); padding: 10px 12px; }
+.folder-note-wrap { display: grid; gap: 6px; }
+.folder-note-row { display: grid; grid-template-columns: minmax(0,1fr) 40px; gap: 6px; align-items: stretch; }
+.folder-note-item { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 14px; background: rgba(15,23,42,0.58); padding: 10px 12px; margin: 0; }
 .folder-note-item.active { background: rgba(248,250,252,0.18); border: 1px solid rgba(248,250,252,0.25); }
+.folder-note-expand { border-radius: 14px; background: rgba(15,23,42,0.58); font-size: 22px; line-height: 1; padding: 0; min-height: 40px; }
 .folder-note-copy { min-width: 0; display: grid; gap: 2px; }
 .folder-note-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-note-preview { color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-note-item small { color: #94a3b8; white-space: nowrap; }
+.folder-note-detail { margin-left: 8px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.06); color: #cbd5e1; }
+.folder-note-list { margin: 0; padding-left: 18px; }
+.folder-note-text { white-space: pre-wrap; line-height: 1.45; }
 .folder-note-empty { color: #94a3b8; padding: 8px 4px; font-size: 14px; }
 .folder-tools { display: grid; gap: 8px; margin-top: 12px; }
 .notes-head { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 14px; }

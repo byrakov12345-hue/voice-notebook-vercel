@@ -855,6 +855,7 @@ export default function App() {
   const [listening, setListening] = useState(false);
   const [suggestedFolder, setSuggestedFolder] = useState('');
   const [expandedFolders, setExpandedFolders] = useState({});
+  const [expandedNotes, setExpandedNotes] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceOptions, setVoiceOptions] = useState([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
@@ -934,6 +935,10 @@ export default function App() {
 
   function toggleFolderExpand(folderName) {
     setExpandedFolders(prev => ({ ...prev, [folderName]: !prev[folderName] }));
+  }
+
+  function toggleNoteExpand(noteId) {
+    setExpandedNotes(prev => ({ ...prev, [noteId]: !prev[noteId] }));
   }
 
   function deleteNoteNow(note) {
@@ -1288,7 +1293,6 @@ export default function App() {
       <header className="hero">
         <div>
           <h1>АИ Блокнот</h1>
-          <p>Микрофон, папки и быстрые команды. Остальное происходит в фоне.</p>
         </div>
         <div className="hero-actions">
           <button className="icon-button" onClick={() => setSettingsOpen(value => !value)} aria-label="Открыть настройки голоса">⚙</button>
@@ -1383,17 +1387,38 @@ export default function App() {
                 {expanded ? (
                   <div className="folder-notes">
                     {folderNotes.length ? folderNotes.map(note => (
-                      <button
-                        key={note.id}
-                        className={selectedId === note.id ? 'folder-note-item active' : 'folder-note-item'}
-                        onClick={() => openNote(note)}
-                      >
-                        <div className="folder-note-copy">
-                          <span className="folder-note-title">{note.title}</span>
-                          {note.type === 'shopping_list' ? <small className="folder-note-preview">{(note.items || []).join(', ')}</small> : null}
+                      <div key={note.id} className="folder-note-wrap">
+                        <div className={selectedId === note.id ? 'folder-note-row active' : 'folder-note-row'}>
+                          <button
+                            className={selectedId === note.id ? 'folder-note-item active' : 'folder-note-item'}
+                            onClick={() => openNote(note)}
+                          >
+                            <div className="folder-note-copy">
+                              <span className="folder-note-title">{note.title}</span>
+                              {note.type === 'shopping_list' ? <small className="folder-note-preview">{(note.items || []).join(', ')}</small> : null}
+                            </div>
+                            <small>{formatDate(note.createdAt)}</small>
+                          </button>
+                          <button
+                            className="folder-note-expand"
+                            onClick={() => toggleNoteExpand(note.id)}
+                            aria-label={expandedNotes[note.id] ? `Свернуть запись ${note.title}` : `Развернуть запись ${note.title}`}
+                          >
+                            {expandedNotes[note.id] ? '−' : '+'}
+                          </button>
                         </div>
-                        <small>{formatDate(note.createdAt)}</small>
-                      </button>
+                        {expandedNotes[note.id] ? (
+                          <div className="folder-note-detail">
+                            {note.type === 'shopping_list' ? (
+                              <ul className="folder-note-list">
+                                {(note.items || []).map((item, index) => <li key={`${note.id}_${index}`}>{item}</li>)}
+                              </ul>
+                            ) : (
+                              <div className="folder-note-text">{shareText(note)}</div>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
                     )) : <div className="folder-note-empty">В этой папке пока нет записей</div>}
                   </div>
                 ) : null}
