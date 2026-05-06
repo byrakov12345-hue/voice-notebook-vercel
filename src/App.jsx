@@ -4,6 +4,7 @@ const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecogni
 const STORAGE_KEY = 'smart_voice_notebook_live_v2';
 const LEGACY_STORAGE_KEYS = ['smart_voice_notebook_live_v1'];
 const VOICE_STORAGE_KEY = 'smart_voice_notebook_voice_v1';
+const VOICE_STYLE_STORAGE_KEY = 'smart_voice_notebook_voice_style_v1';
 
 const DEFAULT_FOLDERS = [
   'Идеи', 'Встречи', 'Покупки', 'Задачи', 'Контакты', 'Коды и комбинации',
@@ -134,7 +135,20 @@ function prepareSpeechText(text) {
     .trim();
 }
 
-function speak(text, preferredVoiceURI = '') {
+function getVoiceStyleConfig(style) {
+  switch (style) {
+    case 'male':
+      return { label: 'Мужской', rate: 0.9, pitch: 0.72 };
+    case 'child':
+      return { label: 'Детский', rate: 1.02, pitch: 1.32 };
+    case 'robot':
+      return { label: 'Робот', rate: 0.86, pitch: 0.58 };
+    default:
+      return { label: 'Обычный', rate: 0.92, pitch: 1 };
+  }
+}
+
+function speak(text, preferredVoiceURI = '', voiceStyle = 'default') {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const msg = new SpeechSynthesisUtterance(prepareSpeechText(text));
@@ -143,8 +157,9 @@ function speak(text, preferredVoiceURI = '') {
   const preferredVoice = preferredVoiceURI ? voices.find(voice => voice.voiceURI === preferredVoiceURI) : null;
   const ruVoice = preferredVoice || voices.find(voice => /^ru(-|_)?/i.test(voice.lang)) || voices.find(voice => /russian|рус/i.test(voice.name));
   if (ruVoice) msg.voice = ruVoice;
-  msg.rate = 0.92;
-  msg.pitch = 1;
+  const styleConfig = getVoiceStyleConfig(voiceStyle);
+  msg.rate = styleConfig.rate;
+  msg.pitch = styleConfig.pitch;
   window.speechSynthesis.speak(msg);
 }
 
@@ -843,6 +858,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceOptions, setVoiceOptions] = useState([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
+  const [selectedVoiceStyle, setSelectedVoiceStyle] = useState('default');
   const useAI = true;
   const recognitionRef = useRef(null);
   const lastCommandRef = useRef({ text: '', at: 0 });
@@ -860,12 +876,8 @@ export default function App() {
 
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices?.() || [];
-      const usable = [...voices].sort((a, b) => {
-        const aRu = /^ru(-|_)?/i.test(a.lang) || /russian|рус/i.test(a.name);
-        const bRu = /^ru(-|_)?/i.test(b.lang) || /russian|рус/i.test(b.name);
-        if (aRu !== bRu) return aRu ? -1 : 1;
-        return String(a.name || '').localeCompare(String(b.name || ''));
-      });
+      const filtered = voices.filter(voice => /^ru(-|_)?/i.test(voice.lang) || /russian|рус/i.test(voice.name));
+      const usable = (filtered.length ? filtered : voices).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
       setVoiceOptions(usable);
 
       const saved = localStorage.getItem(VOICE_STORAGE_KEY) || '';
@@ -890,6 +902,15 @@ export default function App() {
     if (selectedVoiceURI) localStorage.setItem(VOICE_STORAGE_KEY, selectedVoiceURI);
   }, [selectedVoiceURI]);
 
+  useEffect(() => {
+    const savedStyle = localStorage.getItem(VOICE_STYLE_STORAGE_KEY);
+    if (savedStyle) setSelectedVoiceStyle(savedStyle);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(VOICE_STYLE_STORAGE_KEY, selectedVoiceStyle);
+  }, [selectedVoiceStyle]);
+
   const visibleNotes = useMemo(() => {
     let list = [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     if (selectedFolder !== 'Все') list = list.filter(n => n.folder === selectedFolder);
@@ -899,7 +920,7 @@ export default function App() {
 
   function setStatusVoice(text, voice = true) {
     setStatus(text);
-    if (voice) speak(text, selectedVoiceURI);
+    if (voice) speak(text, selectedVoiceURI, selectedVoiceStyle);
   }
 
   function openFolder(folderName, voice = true) {
@@ -1115,7 +1136,7 @@ export default function App() {
       return true;
     }
     if (plan.action === 'share_current') { selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.'); return true; }
-    if (plan.action === 'read_current') { selectedNote ? speak(shareText(selectedNote), selectedVoiceURI) : setStatusVoice('Сначала откройте запись.'); return true; }
+    if (plan.action === 'read_current') { selectedNote ? speak(shareText(selectedNote), selectedVoiceURI, selectedVoiceStyle) : setStatusVoice('Сначала откройте запись.'); return true; }
     if (plan.action === 'read_contact_latest') {
       const latestContact = [...data.notes]
         .filter(note => note.folder === 'Контакты' || note.type === 'contact')
@@ -1123,7 +1144,7 @@ export default function App() {
       if (!latestContact) setStatusVoice('В папке Контакты пока нет записей.');
       else {
         openNote(latestContact);
-        speak(contactSpeechText(latestContact), selectedVoiceURI);
+        speak(contactSpeechText(latestContact), selectedVoiceURI, selectedVoiceStyle);
         setSuggestedFolder('Контакты');
         setStatus('');
       }
@@ -1136,7 +1157,7 @@ export default function App() {
       if (!latestInFolder) setStatusVoice(`В папке ${plan.folder || 'этой'} пока нет записей.`);
       else {
         openNote(latestInFolder);
-        speak(shareText(latestInFolder), selectedVoiceURI);
+        speak(shareText(latestInFolder), selectedVoiceURI, selectedVoiceStyle);
         setSuggestedFolder(plan.folder);
         setStatus('');
       }
@@ -1201,7 +1222,7 @@ export default function App() {
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
         if (!latestContact) return setStatusVoice('В папке Контакты пока нет записей.');
         openNote(latestContact);
-        speak(contactSpeechText(latestContact), selectedVoiceURI);
+        speak(contactSpeechText(latestContact), selectedVoiceURI, selectedVoiceStyle);
         setSuggestedFolder('Контакты');
         setStatus('');
         return;
@@ -1212,12 +1233,12 @@ export default function App() {
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
         if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
         openNote(latestInFolder);
-        speak(shareText(latestInFolder), selectedVoiceURI);
+        speak(shareText(latestInFolder), selectedVoiceURI, selectedVoiceStyle);
         setSuggestedFolder(folderMatch.name);
         setStatus('');
         return;
       }
-      return selectedNote ? speak(shareText(selectedNote), selectedVoiceURI) : setStatusVoice('Сначала откройте запись.');
+      return selectedNote ? speak(shareText(selectedNote), selectedVoiceURI, selectedVoiceStyle) : setStatusVoice('Сначала откройте запись.');
     }
     if (intent === 'call') {
       const found = searchNotes(data.notes.filter(n => n.type === 'contact'), spoken)[0] || selectedNote;
@@ -1281,6 +1302,20 @@ export default function App() {
             <strong>Голос помощника</strong>
             <button onClick={() => setSettingsOpen(false)}>Закрыть</button>
           </div>
+          <div className="voice-style-list">
+            {['default', 'male', 'child', 'robot'].map(style => (
+              <button
+                key={style}
+                className={selectedVoiceStyle === style ? 'voice-style-option active' : 'voice-style-option'}
+                onClick={() => {
+                  setSelectedVoiceStyle(style);
+                  speak(`Выбран стиль ${getVoiceStyleConfig(style).label}`, selectedVoiceURI, style);
+                }}
+              >
+                {getVoiceStyleConfig(style).label}
+              </button>
+            ))}
+          </div>
           <div className="voice-list">
             {voiceOptions.length ? voiceOptions.map(voice => (
               <button
@@ -1288,7 +1323,7 @@ export default function App() {
                 className={selectedVoiceURI === voice.voiceURI ? 'voice-option active' : 'voice-option'}
                 onClick={() => {
                   setSelectedVoiceURI(voice.voiceURI);
-                  speak(`Выбран голос ${voice.name}`, voice.voiceURI);
+                  speak(`Выбран голос ${voice.name}`, voice.voiceURI, selectedVoiceStyle);
                 }}
               >
                 <span>{voiceDisplayMeta(voice).title}</span>
