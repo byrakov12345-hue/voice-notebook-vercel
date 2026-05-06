@@ -319,6 +319,14 @@ function extractExplicitFolder(text) {
   return '';
 }
 
+function extractFolderCreateName(text) {
+  const source = normalize(text);
+  const match = source.match(/^(?:создай папку|создать папку)\s+(.+)$/i);
+  if (!match?.[1]) return '';
+  const candidate = match[1].trim();
+  return resolveExplicitFolderName(candidate);
+}
+
 function isFamilyContext(text) {
   const source = normalize(text);
   return includesAny(source, [
@@ -691,7 +699,7 @@ function localAIPlan(text, data, currentNote) {
   if (intent === 'search') return { action: 'search_notes', query: text };
 
   if (intent === 'create_folder') {
-    return { action: 'create_folder', folder: extractExplicitFolder(text) || cleanTitle(text.replace(/создай папку|создать папку/gi, ''), 'Новая папка') };
+    return { action: 'create_folder', folder: extractFolderCreateName(text) || extractExplicitFolder(text) || cleanTitle(text.replace(/создай папку|создать папку/gi, ''), 'Новая папка') };
   }
 
   if (intent === 'save') {
@@ -1033,6 +1041,15 @@ export default function App() {
     lastCommandRef.current = { text: normalizedSpoken, at: nowTs };
     setCommand(spoken);
     const source = normalizedSpoken;
+
+    if (startsWithAny(source, ['создай папку', 'создать папку'])) {
+      const folderName = extractFolderCreateName(spoken) || cleanTitle(spoken.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
+      setData(prev => ({ ...prev, folders: ensureFolder(prev.folders, folderName) }));
+      setSelectedFolder(folderName);
+      setSelectedId(null);
+      setSuggestedFolder('');
+      return setStatusVoice(`Папка ${folderName} создана или уже существует.`);
+    }
 
     if (useAI) {
       setStatus('Локальный AI разбирает команду...');
