@@ -773,6 +773,7 @@ export default function App() {
   const [suggestedFolder, setSuggestedFolder] = useState('');
   const useAI = true;
   const recognitionRef = useRef(null);
+  const lastCommandRef = useRef({ text: '', at: 0 });
 
   const selectedNote = data.notes.find(n => n.id === selectedId) || null;
   const speechSupported = Boolean(SpeechRecognition);
@@ -1020,8 +1021,18 @@ export default function App() {
   async function processCommand(text) {
     const spoken = String(text || '').trim();
     if (!spoken) return;
+    const normalizedSpoken = normalize(spoken);
+    const nowTs = Date.now();
+    if (
+      lastCommandRef.current.text === normalizedSpoken &&
+      nowTs - lastCommandRef.current.at < 8000
+    ) {
+      setStatusVoice('Повтор команды пропущен.', false);
+      return;
+    }
+    lastCommandRef.current = { text: normalizedSpoken, at: nowTs };
     setCommand(spoken);
-    const source = normalize(spoken);
+    const source = normalizedSpoken;
 
     if (useAI) {
       setStatus('Локальный AI разбирает команду...');
