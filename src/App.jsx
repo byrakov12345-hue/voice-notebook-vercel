@@ -447,7 +447,7 @@ function createNoteFromLocalText(text) {
   if (type === 'contact') {
     const c = extractContact(content);
     return {
-      id: uid('note'), type, folder: 'Контакты', title: `${c.name}${c.description ? ` — ${c.description}` : ''}`,
+      id: uid('note'), type, folder, title: `${c.name}${c.description ? ` — ${c.description}` : ''}`,
       content, name: c.name, description: c.description, phone: c.phone,
       tags: [c.name, c.description, 'телефон', 'контакт'].filter(Boolean), createdAt: now, updatedAt: now
     };
@@ -456,7 +456,7 @@ function createNoteFromLocalText(text) {
   if (type === 'shopping_list') {
     const items = extractItems(content);
     return {
-      id: uid('note'), type, folder: 'Покупки', title: 'Список покупок', content: items.join(', '),
+      id: uid('note'), type, folder, title: 'Список покупок', content: items.join(', '),
       items, checkedItems: [], tags: ['покупки', 'магазин', ...items], createdAt: now, updatedAt: now
     };
   }
@@ -464,7 +464,7 @@ function createNoteFromLocalText(text) {
   if (type === 'code') {
     const code = extractDigits(content) || content;
     return {
-      id: uid('note'), type, folder: 'Коды и комбинации', title: 'Комбинация цифр', content: code,
+      id: uid('note'), type, folder, title: 'Комбинация цифр', content: code,
       isSensitive: true, tags: ['код', 'комбинация', 'цифры'], createdAt: now, updatedAt: now
     };
   }
@@ -698,17 +698,17 @@ function localAIPlan(text, data, currentNote) {
     if (type === 'contact') {
       const c = extractContact(content);
       return {
-        action: 'save_contact', type: 'contact', folder: 'Контакты', title: `${c.name}${c.description ? ` — ${c.description}` : ''}`,
+        action: 'save_contact', type: 'contact', folder: resolveFolderName(text, 'contact'), title: `${c.name}${c.description ? ` — ${c.description}` : ''}`,
         content, name: c.name, description: c.description, phone: c.phone,
         tags: [c.name, c.description, 'телефон', 'контакт'].filter(Boolean), showAfterSave
       };
     }
     if (type === 'shopping_list') {
       const items = extractItems(content);
-      return { action: 'save_shopping_list', type, folder: 'Покупки', title: 'Список покупок', content: items.join(', '), items, tags: ['покупки', 'магазин', ...items], showAfterSave };
+      return { action: 'save_shopping_list', type, folder: resolveFolderName(text, type), title: 'Список покупок', content: items.join(', '), items, tags: ['покупки', 'магазин', ...items], showAfterSave };
     }
     if (type === 'code') {
-      return { action: 'save_code', type, folder: 'Коды и комбинации', title: 'Комбинация цифр', content: extractDigits(content) || content, tags: ['код', 'комбинация', 'цифры'], showAfterSave };
+      return { action: 'save_code', type, folder: resolveFolderName(text, type), title: 'Комбинация цифр', content: extractDigits(content) || content, tags: ['код', 'комбинация', 'цифры'], showAfterSave };
     }
     if (type === 'appointment') {
       const appointmentTime = extractAppointmentTime(content);
