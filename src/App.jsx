@@ -88,6 +88,19 @@ function capitalize(text) {
   return value ? value[0].toUpperCase() + value.slice(1) : value;
 }
 
+function voiceDisplayMeta(voice) {
+  const name = String(voice?.name || '');
+  const lang = String(voice?.lang || '');
+  const source = `${name} ${lang}`.toLowerCase();
+  let gender = 'Голос';
+  if (/male|man|муж|aleksei|yuri|pavel|sergey|igor/.test(source)) gender = 'Мужской';
+  if (/female|woman|жен|alina|anna|olga|irina|maria|milena/.test(source)) gender = 'Женский';
+  return {
+    title: name || 'Системный голос',
+    subtitle: `${gender} · ${lang || 'system'}`
+  };
+}
+
 function prepareSpeechText(text) {
   const replacements = [
     [/\bсмс\b/gi, 'эс эм эс'],
@@ -825,8 +838,12 @@ export default function App() {
 
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices?.() || [];
-      const filtered = voices.filter(voice => /^ru(-|_)?/i.test(voice.lang) || /russian|рус/i.test(voice.name));
-      const usable = filtered.length ? filtered : voices;
+      const usable = [...voices].sort((a, b) => {
+        const aRu = /^ru(-|_)?/i.test(a.lang) || /russian|рус/i.test(a.name);
+        const bRu = /^ru(-|_)?/i.test(b.lang) || /russian|рус/i.test(b.name);
+        if (aRu !== bRu) return aRu ? -1 : 1;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
       setVoiceOptions(usable);
 
       const saved = localStorage.getItem(VOICE_STORAGE_KEY) || '';
@@ -1252,8 +1269,8 @@ export default function App() {
                   speak(`Выбран голос ${voice.name}`, voice.voiceURI);
                 }}
               >
-                <span>{voice.name}</span>
-                <small>{voice.lang}</small>
+                <span>{voiceDisplayMeta(voice).title}</span>
+                <small>{voiceDisplayMeta(voice).subtitle}</small>
               </button>
             )) : <div className="folder-note-empty">Голоса браузера пока не загрузились</div>}
           </div>
