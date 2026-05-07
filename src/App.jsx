@@ -730,10 +730,10 @@ function extractContact(text) {
   return { name, description, phone };
 }
 
-function createNoteFromLocalText(text) {
+function createNoteFromLocalText(text, preferredFolder = '') {
   const now = new Date().toISOString();
   const type = inferType(text);
-  const folder = resolveFolderName(text, type);
+  const folder = resolveSaveFolder(text, type, preferredFolder);
   const content = String(text || '').replace(/^(запомни|запиши|сохрани|добавь)\s*/i, '').trim();
   const tags = normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10);
 
@@ -783,8 +783,8 @@ function createNoteFromLocalText(text) {
   };
 }
 
-function createNoteFromAI(plan, fallbackText) {
-  if (!plan || typeof plan !== 'object') return createNoteFromLocalText(fallbackText);
+function createNoteFromAI(plan, fallbackText, preferredFolder = '') {
+  if (!plan || typeof plan !== 'object') return createNoteFromLocalText(fallbackText, preferredFolder);
   const now = new Date().toISOString();
   const actionMap = {
     save_idea: 'idea', save_task: 'task', save_appointment: 'appointment', save_shopping_list: 'shopping_list',
@@ -814,7 +814,7 @@ function createNoteFromAI(plan, fallbackText) {
     return {
       id: uid('note'),
       type,
-      folder: plan.folder || resolveFolderName(fallbackText, type),
+      folder: plan.folder || resolveSaveFolder(fallbackText, type, preferredFolder),
       title: plan.title || cleanTitle(plan.content || fallbackText, 'Встреча'),
       content: plan.content || fallbackText,
       dateLabel: plan.dateLabel || eventMeta.dateLabel,
@@ -829,7 +829,7 @@ function createNoteFromAI(plan, fallbackText) {
     };
   }
 
-  return { id: uid('note'), type, folder: plan.folder || resolveFolderName(fallbackText, type), title: plan.title || cleanTitle(plan.content || fallbackText, TYPE_LABELS[type] || 'Заметка'), content: plan.content || fallbackText, tags: Array.isArray(plan.tags) ? plan.tags : [], createdAt: now, updatedAt: now };
+  return { id: uid('note'), type, folder: plan.folder || resolveSaveFolder(fallbackText, type, preferredFolder), title: plan.title || cleanTitle(plan.content || fallbackText, TYPE_LABELS[type] || 'Заметка'), content: plan.content || fallbackText, tags: Array.isArray(plan.tags) ? plan.tags : [], createdAt: now, updatedAt: now };
 }
 
 function detectIntent(text) {
@@ -885,8 +885,15 @@ function findFolderByText(folders, text) {
 
 function extractFolderListIndex(text) {
   const source = normalize(text);
-  const match = source.match(/(?:спис(?:ок|ка)|запис(?:ь|и|ку))\s+(\d{1,3})/i);
+  const match = source.match(/(?:спис(?:ок|ка)|запис(?:ь|и|ку)|заметк(?:у|и|а)?|номер)\s+(\d{1,3})/i);
   return match ? Number(match[1]) : null;
+}
+
+function resolveSaveFolder(text, type = 'note', preferredFolder = '') {
+  const explicit = extractExplicitFolder(text);
+  if (explicit) return explicit;
+  if (preferredFolder && preferredFolder !== 'Все') return preferredFolder;
+  return resolveFolderName(text, type);
 }
 
 function extractRenameValue(text) {
@@ -998,7 +1005,7 @@ function stripSaveWords(text) {
     .trim();
 }
 
-function localAIPlan(text, data, currentNote) {
+function localAIPlan(text, data, currentNote, activeFolder = '') {
   const source = normalize(text);
   const intent = detectIntent(text);
   const type = inferType(text);
@@ -1011,6 +1018,9 @@ function localAIPlan(text, data, currentNote) {
     const listIndex = extractFolderListIndex(text);
     if (folderMatch && listIndex) {
       return { action: 'delete_folder_indexed_note', folder: folderMatch.name, index: listIndex, target: 'folder_index' };
+    }
+    if (activeFolder && activeFolder !== 'Все' && listIndex) {
+      return { action: 'delete_folder_indexed_note', folder: activeFolder, index: listIndex, target: 'folder_index' };
     }
     if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) {
       return { action: 'delete_trash', target: 'trash' };
@@ -1075,17 +1085,17 @@ function localAIPlan(text, data, currentNote) {
     if (type === 'contact') {
       const c = extractContact(content);
       return {
-        action: 'save_contact', type: 'contact', folder: resolveFolderName(text, 'contact'), title: `${c.name}${c.description ? ` — ${c.description}` : ''}`,
+        action: 'save_contact', type: 'contact', folder: resolveSaveFolder(text, 'contact', activeFolder), title: `${c.name}${c.description ? ` — ${c.description}` : ''}`,
         content, name: c.name, description: c.description, phone: c.phone,
         tags: [c.name, c.description, 'телефон', 'контакт'].filter(Boolean), showAfterSave
       };
     }
     if (type === 'shopping_list') {
       const items = extractItems(content);
-      return { action: 'save_shopping_list', type, folder: resolveFolderName(text, type), title: 'Список покупок', content: items.join(', '), items, tags: ['покупки', 'магазин', ...items], showAfterSave };
+      return { action: 'save_shopping_list', type, folder: resolveSaveFolder(text, type, activeFolder), title: 'Список покупок', content: items.join(', '), items, tags: ['покупки', 'магазин', ...items], showAfterSave };
     }
     if (type === 'code') {
-      return { action: 'save_code', type, folder: resolveFolderName(text, type), title: 'Комбинация цифр', content: extractDigits(content) || content, tags: ['код', 'комбинация', 'цифры'], showAfterSave };
+      return { action: 'save_code', type, folder: resolveSaveFolder(text, type, activeFolder), title: 'Комбинация цифр', content: extractDigits(content) || content, tags: ['код', 'комбинация', 'цифры'], showAfterSave };
     }
     if (type === 'appointment') {
       const appointmentTime = extractAppointmentTime(content);
@@ -1093,30 +1103,30 @@ function localAIPlan(text, data, currentNote) {
       let title = cleanTitle(content, 'Встреча');
       if (source.includes('стриж')) title = 'Стрижка';
       else if (source.includes('врач')) title = 'Врач';
-      return { action: 'save_appointment', type, folder: resolveFolderName(text, type), title, content, dateLabel: appointmentDate, time: appointmentTime, tags: ['встреча', appointmentDate, appointmentTime].filter(Boolean), showAfterSave };
+      return { action: 'save_appointment', type, folder: resolveSaveFolder(text, type, activeFolder), title, content, dateLabel: appointmentDate, time: appointmentTime, tags: ['встреча', appointmentDate, appointmentTime].filter(Boolean), showAfterSave };
     }
     if (type === 'idea') {
       return { action: 'save_idea', type, folder: 'Идеи', title: cleanTitle(content, 'Идея'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
     if (type === 'task') {
-      return { action: 'save_task', type, folder: resolveFolderName(text, type), title: cleanTitle(content, 'Задача'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
+      return { action: 'save_task', type, folder: resolveSaveFolder(text, type, activeFolder), title: cleanTitle(content, 'Задача'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
-    return { action: 'save_note', type: 'note', folder: resolveFolderName(text, 'note'), title: cleanTitle(content, 'Заметка'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
+    return { action: 'save_note', type: 'note', folder: resolveSaveFolder(text, 'note', activeFolder), title: cleanTitle(content, 'Заметка'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
   }
 
   return { action: 'unknown', type: 'unknown' };
 }
 
-function NoteCard({ note, selected, onOpen, onShare, onCopy, onDelete, onCall, onMessage, onRestore }) {
+function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy, onDelete, onCall, onMessage, onRestore }) {
   const hasDuplicateBody = normalize(note.title) === normalize(note.content);
   return (
     <article className={`note-card ${selected ? 'selected' : ''}`}>
       <button className="note-main" onClick={() => onOpen(note)}>
         <div className="note-top">
-          <span>{note.folder} · {TYPE_LABELS[note.type] || 'Запись'}</span>
+          <span>{displayIndex ? `${displayIndex}. ` : ''}{note.folder} · {TYPE_LABELS[note.type] || 'Запись'}</span>
           <small>{formatDate(note.createdAt)}</small>
         </div>
-        <h3>{note.title}</h3>
+        <h3>{displayIndex ? `${displayIndex}. ` : ''}{note.title}</h3>
         {note.type === 'shopping_list' ? (
           <ul>{(note.items || []).map((item, i) => <li key={`${note.id}_${i}`}>{item}</li>)}</ul>
         ) : note.type === 'contact' ? (
@@ -1302,6 +1312,10 @@ export default function App() {
     return list;
   }, [data.notes, selectedFolder, query, historyFilter]);
   const calendarMonths = useMemo(() => buildCalendarMonths(data.notes), [data.notes]);
+  const selectedNoteIndex = useMemo(
+    () => visibleNotes.findIndex(note => note.id === selectedId),
+    [visibleNotes, selectedId]
+  );
 
   function setStatusVoice(text, voice = true) {
     setStatus(text);
@@ -1367,6 +1381,12 @@ export default function App() {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     const target = ordered[(Number(displayIndex) || 0) - 1];
     if (!target) return setStatusVoice(`В папке ${folderName} нет записи с номером ${displayIndex}.`, false);
+    deleteNoteNow(target);
+  }
+
+  function deleteVisibleIndexedNote(displayIndex) {
+    const target = visibleNotes[(Number(displayIndex) || 0) - 1];
+    if (!target) return setStatusVoice(`Не нашёл запись с номером ${displayIndex}.`, false);
     deleteNoteNow(target);
   }
 
@@ -1451,41 +1471,13 @@ export default function App() {
   }
 
   function saveNote(note, showAfterSave = false) {
-    const freshWindowMs = 300000;
-    let duplicateDetected = false;
-    const incomingSignature = noteSignature(note);
-    if (
-      lastSavedRef.current.signature === incomingSignature &&
-      Date.now() - lastSavedRef.current.at < freshWindowMs
-    ) {
-      setStatusVoice(`Такая запись уже только что сохранена в папку ${note.folder}.`, false);
-      return;
-    }
-
     setData(prev => {
-      const nowTs = Date.now();
-      const duplicate = prev.notes
-        .slice(0, 100)
-        .find(existing => isSameOrNearDuplicate(existing, note) && nowTs - new Date(existing.createdAt).getTime() <= freshWindowMs);
-
-      if (duplicate) {
-        duplicateDetected = true;
-        return prev;
-      }
-
       return {
         ...prev,
         folders: ensureFolder(prev.folders, note.folder),
         notes: [note, ...prev.notes]
       };
     });
-
-    if (duplicateDetected) {
-      setStatusVoice(`Такая запись уже только что сохранена в папку ${note.folder}.`, false);
-      return;
-    }
-
-    lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
     setSuggestedFolder('');
@@ -1718,9 +1710,10 @@ export default function App() {
 
   function handleDelete(text) {
     const source = normalize(text);
-    const indexedFolder = findFolderByText(data.folders, text);
+    const indexedFolder = findFolderByText(data.folders, text) || (selectedFolder !== 'Все' ? { name: selectedFolder } : null);
     const indexedNumber = extractFolderListIndex(text);
     if (indexedFolder && indexedNumber) return deleteFolderIndexedNote(indexedFolder.name, indexedNumber);
+    if (indexedNumber) return deleteVisibleIndexedNote(indexedNumber);
     if (includesAny(source, ['удали из списка', 'убери из списка', 'вычеркни из списка'])) return removeFromCurrentShoppingList(extractListItemToRemove(text));
     if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'удали все с блокнота', 'удали всё с блокнота', 'очисти блокнот', 'очисти весь блокнот'])) return clearNotebookNow();
     if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) return setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false);
@@ -1756,12 +1749,13 @@ export default function App() {
 
   async function executePlan(plan, originalText) {
     if (!plan?.action || plan.action === 'unknown') return false;
+    const preferredFolder = selectedFolder !== 'Все' ? selectedFolder : '';
     if (plan.action === 'save_shopping_list' && isShoppingAppendCommand(originalText)) {
       const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
-      if (appendToLatestShoppingList(plan.folder || resolveFolderName(originalText, 'shopping_list'), appendItems, originalText)) return true;
+      if (appendToLatestShoppingList(plan.folder || resolveSaveFolder(originalText, 'shopping_list', preferredFolder), appendItems, originalText)) return true;
     }
     if (plan.action.startsWith('save_')) {
-      const note = createNoteFromAI(plan, originalText);
+      const note = createNoteFromAI(plan, originalText, preferredFolder);
       saveNote(note, Boolean(plan.showAfterSave || includesAny(originalText, ['выведи', 'покажи', 'открой', 'на экран'])));
       return true;
     }
@@ -1871,6 +1865,7 @@ export default function App() {
     processingCommandRef.current = true;
     setCommand(spoken);
     const source = normalizedSpoken;
+    const preferredFolder = selectedFolder !== 'Все' ? selectedFolder : '';
     try {
       if (startsWithAny(source, ['создай папку', 'создать папку'])) {
         const folderName = extractFolderCreateName(spoken) || cleanTitle(spoken.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
@@ -1895,7 +1890,7 @@ export default function App() {
 
       if (useAI) {
         setStatus('Локальный AI разбирает команду...');
-        const plan = localAIPlan(spoken, data, selectedNote);
+        const plan = localAIPlan(spoken, data, selectedNote, preferredFolder);
         const handled = await executePlan(plan, spoken);
         if (handled) {
           lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
@@ -1906,7 +1901,7 @@ export default function App() {
       const intent = detectIntent(spoken);
       if (intent === 'save') {
         if (isShoppingAppendCommand(spoken)) {
-          const targetFolder = resolveFolderName(spoken, 'shopping_list');
+          const targetFolder = resolveSaveFolder(spoken, 'shopping_list', preferredFolder);
           const items = extractItems(spoken);
           if (appendToLatestShoppingList(targetFolder, items, spoken)) {
             lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
@@ -1914,7 +1909,7 @@ export default function App() {
           }
         }
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
-        return saveNote(createNoteFromLocalText(spoken), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
+        return saveNote(createNoteFromLocalText(spoken, preferredFolder), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
       }
       if (intent === 'history') {
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
@@ -2303,9 +2298,9 @@ export default function App() {
             <div><h2>{selectedFolder}</h2><p>{visibleNotes.length} записей</p></div>
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Поиск по заметкам" />
           </div>
-          {selectedNote ? <div className="selected-inline"><NoteCard note={selectedNote} selected onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} /></div> : null}
+          {selectedNote ? <div className="selected-inline"><NoteCard note={selectedNote} displayIndex={selectedNoteIndex >= 0 ? selectedNoteIndex + 1 : null} selected onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} /></div> : null}
           <div className="note-list">
-            {visibleNotes.length ? visibleNotes.map(note => <NoteCard key={note.id} note={note} selected={selectedId === note.id} onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} />) : <div className="empty">Записей пока нет. Скажите или напишите команду.</div>}
+            {visibleNotes.length ? visibleNotes.map((note, index) => <NoteCard key={note.id} note={note} displayIndex={index + 1} selected={selectedId === note.id} onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} />) : <div className="empty">Записей пока нет. Скажите или напишите команду.</div>}
           </div>
         </section>
       </main>
