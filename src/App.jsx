@@ -576,17 +576,20 @@ function parseCalendarTargetDate(text) {
 
 function stripCalendarVoiceContent(text) {
   return String(text || '')
-    .replace(/^(открой|отметь|запиши|запомни|сохрани)\s+/i, '')
+    .replace(/^(открой|отметь|запиши|запомни|сохрани|добавь|поставь)\s+/i, '')
+    .replace(/^(?:на\s+)?/i, '')
     .replace(/\b\d{1,2}\s+число\s+этого\s+месяца\b/i, '')
     .replace(/\b\d{1,2}\s+(?:число\s+)?(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i, '')
     .replace(/\b(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\s+\d{1,2}(?:\s+число)?\b/i, '')
     .replace(/\bоставь\s+напоминание\b/i, '')
+    .replace(/\bнапоминание\b/i, '')
     .replace(/\bсделай\s+уведомление\b/i, '')
     .replace(/\bустанови\s+уведомление\b/i, '')
     .replace(/\b(?:в|на)\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
     .replace(/\bи\s+(?:в|на)\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
     .replace(/\b(?:первое|1-е|утренн\w+|второе|2-е|второй)\s+напоминани[ея]\s+на\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
     .replace(/\b(?:и\s+)?(?:первое|1-е|утренн\w+|второе|2-е|второй)\s+напоминани[ея]\b/gi, '')
+    .replace(/^\s*на\s+/i, '')
     .replace(/^и\s+/i, '')
     .replace(/^что\s+/i, '')
     .replace(/\s+/g, ' ')
@@ -2613,7 +2616,8 @@ export default function App() {
                   {Array.from({ length: month.daysInMonth }, (_, dayIndex) => {
                     const dayDate = new Date(month.monthDate.getFullYear(), month.monthDate.getMonth(), dayIndex + 1, 12, 0, 0, 0);
                     const dayIso = dayDate.toISOString();
-                    const hasItems = month.items.some(note => String(note.eventAt || '').slice(0, 10) === dayIso.slice(0, 10));
+                    const dayItems = month.items.filter(note => String(note.eventAt || '').slice(0, 10) === dayIso.slice(0, 10));
+                    const hasItems = dayItems.length > 0;
                     const isSelected = calendarSelectedDate && String(calendarSelectedDate).slice(0, 10) === dayIso.slice(0, 10);
                     return (
                       <button
@@ -2622,7 +2626,8 @@ export default function App() {
                         className={`calendar-day${hasItems ? ' has-items' : ''}${isSelected ? ' active' : ''}`}
                         onClick={() => selectCalendarDate(dayDate, { clearContext: true })}
                       >
-                        {dayIndex + 1}
+                        <span>{dayIndex + 1}</span>
+                        {dayItems.length > 0 ? <small>{dayItems.length}</small> : null}
                       </button>
                     );
                   })}
