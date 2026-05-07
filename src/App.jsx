@@ -34,6 +34,7 @@ import {
   formatCalendarDateLabel,
   getPeriodRange
 } from './lib/notebookCalendar';
+import { buildReminderPoints, isNotificationSupported } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1149,7 +1150,7 @@ export default function App() {
   }, [calendarOpen]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) return undefined;
+    if (!isNotificationSupported()) return undefined;
     const timeouts = [];
     const emitReminder = (note, remindAt, label) => {
       const key = `${note.id}_${label}_${remindAt.toISOString()}`;
@@ -1179,25 +1180,7 @@ export default function App() {
       data.notes
         .filter(note => note.type === 'appointment' && note.eventAt)
         .forEach(note => {
-          const eventAt = new Date(note.eventAt);
-          if (Number.isNaN(eventAt.getTime())) return;
-          const reminderPoints = [{ at: eventAt, label: 'event' }];
-          const firstEnabled = note.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true;
-          if (firstEnabled) {
-            const morningAt = new Date(eventAt);
-            const [morningHour, morningMinute] = String(note.reminderMorningTime || reminderSettings.morningTime || '09:00').split(':').map(Number);
-            morningAt.setHours(morningHour || 0, morningMinute || 0, 0, 0);
-            reminderPoints.push({ at: morningAt, label: 'morning' });
-          }
-          const secondEnabled = note.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true;
-          const secondValue = note.reminderSecondTime || reminderSettings.secondReminderTime || '';
-          if (secondEnabled && secondValue) {
-            const secondAt = new Date(eventAt);
-            const [secondHour, secondMinute] = String(secondValue).split(':').map(Number);
-            secondAt.setHours(secondHour || 0, secondMinute || 0, 0, 0);
-            reminderPoints.push({ at: secondAt, label: 'before' });
-          }
-          reminderPoints.forEach(point => {
+          buildReminderPoints(note, reminderSettings).forEach(point => {
             const diff = nowTs - point.at.getTime();
             if (diff >= 0 && diff <= graceWindowMs) emitReminder(note, point.at, point.label);
           });
@@ -1211,25 +1194,10 @@ export default function App() {
     data.notes
       .filter(note => note.type === 'appointment' && note.eventAt)
       .forEach(note => {
-        const eventAt = new Date(note.eventAt);
-        if (Number.isNaN(eventAt.getTime())) return;
         if (reminderSettings.enabled && Notification.permission === 'granted') {
-          scheduleNotification(note, eventAt, 'event');
-          const firstEnabled = note.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true;
-          if (firstEnabled) {
-            const morningAt = new Date(eventAt);
-            const [morningHour, morningMinute] = String(note.reminderMorningTime || reminderSettings.morningTime || '09:00').split(':').map(Number);
-            morningAt.setHours(morningHour || 0, morningMinute || 0, 0, 0);
-            scheduleNotification(note, morningAt, 'morning');
-          }
-          const secondEnabled = note.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true;
-          const secondValue = note.reminderSecondTime || reminderSettings.secondReminderTime || '';
-          if (secondEnabled && secondValue) {
-            const secondAt = new Date(eventAt);
-            const [secondHour, secondMinute] = String(secondValue).split(':').map(Number);
-            secondAt.setHours(secondHour || 0, secondMinute || 0, 0, 0);
-            scheduleNotification(note, secondAt, 'before');
-          }
+          buildReminderPoints(note, reminderSettings).forEach(point => {
+            scheduleNotification(note, point.at, point.label);
+          });
         }
       });
 
