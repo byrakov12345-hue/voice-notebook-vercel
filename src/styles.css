@@ -45,7 +45,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .calendar-compose-row input { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 10px 12px; }
 .calendar-reminder-label { display: flex; align-items: center; color: #94a3b8; font-size: 13px; }
 .calendar-list {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc(100% - 8px);
   gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -53,10 +55,12 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   scroll-padding-inline: 4px;
   padding: 4px 4px 10px;
   overscroll-behavior-x: contain;
+  align-items: start;
 }
 .calendar-month {
-  flex: 0 0 min(560px, calc(100vw - 72px));
+  width: 100%;
   scroll-snap-align: start;
+  scroll-snap-stop: always;
   border-radius: 18px;
   padding: 12px;
   background: rgba(255,255,255,0.05);
@@ -157,5 +161,5 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
   .note-list { max-height: none; }
   .reminder-grid { grid-template-columns: 1fr; }
   .calendar-compose-row { grid-template-columns: 1fr; }
-  .calendar-month { flex-basis: calc(100vw - 32px); }
+  .calendar-list { grid-auto-columns: calc(100vw - 32px); }
 }
