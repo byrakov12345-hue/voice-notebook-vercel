@@ -117,6 +117,22 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .status-card small { display: block; color: #94a3b8; margin-top: 6px; }
 .history-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .history-chips button.active { background: #f8fafc; color: #020617; font-weight: 800; }
+.quick-date-strip {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.quick-date-strip button {
+  min-width: 72px;
+  display: grid;
+  gap: 2px;
+  text-align: center;
+  scroll-snap-align: start;
+}
+.quick-date-strip button.active { background: #f8fafc; color: #020617; font-weight: 800; }
+.quick-date-strip button small { color: inherit; opacity: 0.72; margin: 0; }
 .toggle { display: flex; align-items: center; gap: 10px; font-weight: 800; }
 .toggle input { width: 20px; height: 20px; }
 .manual { display: flex; gap: 10px; align-items: center; }

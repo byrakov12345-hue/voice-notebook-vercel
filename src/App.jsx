@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isLikelyGroceryList, shouldAppendShoppingList } from './lib/notebookRules';
 
 const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 const STORAGE_KEY = 'smart_voice_notebook_live_v2';
@@ -341,6 +342,9 @@ function parseAppointmentDateTime(text) {
   }
 
   const time = extractAppointmentTime(text);
+  if (!eventDate && time) {
+    eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  }
   if (eventDate && time) {
     const [hour, minute] = time.split(':').map(Number);
     eventDate.setHours(hour || 0, minute || 0, 0, 0);
@@ -417,6 +421,20 @@ function buildCalendarMonths(notes) {
 
 function formatCalendarDateLabel(date) {
   return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+}
+
+function buildQuickDateStrip() {
+  const now = new Date();
+  return Array.from({ length: 45 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + index, 12, 0, 0, 0);
+    return {
+      key: date.toISOString(),
+      isoDay: date.toISOString().slice(0, 10),
+      day: date.getDate(),
+      label: new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(date),
+      weekday: new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(date)
+    };
+  });
 }
 
 function extractAllTimes(text) {
@@ -789,6 +807,11 @@ function inferType(text) {
   return 'note';
 }
 
+function isTimedShoppingCommand(text) {
+  const source = normalize(text);
+  return inferType(text) === 'shopping_list' && hasDateOrTime(source);
+}
+
 function extractItems(text) {
   return String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь)\s*/i, '')
@@ -859,6 +882,27 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
 
   if (type === 'shopping_list') {
     const items = extractItems(content);
+    if (isTimedShoppingCommand(text)) {
+      const eventMeta = parseAppointmentDateTime(content);
+      return {
+        id: uid('note'),
+        type: 'appointment',
+        folder: 'Покупки',
+        title: deriveShoppingListTitle(items, content),
+        content: items.join(', '),
+        items,
+        dateLabel: eventMeta.dateLabel || formatCalendarDateLabel(new Date(eventMeta.eventAt || Date.now())),
+        time: eventMeta.time || '09:00',
+        eventAt: eventMeta.eventAt || new Date().toISOString(),
+        reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? true),
+        reminderMorningTime: reminderDefaults.morningTime || '09:00',
+        reminderSecondTime: reminderDefaults.secondEnabled ? (reminderDefaults.secondTime || '17:30') : '',
+        reminderSecondEnabled: Boolean(reminderDefaults.secondEnabled),
+        tags: ['покупки', 'магазин', ...items],
+        createdAt: now,
+        updatedAt: now
+      };
+    }
     return {
       id: uid('note'), type, folder, title: deriveShoppingListTitle(items, content), content: items.join(', '),
       items, checkedItems: [], tags: ['покупки', 'магазин', ...items], createdAt: now, updatedAt: now
@@ -1291,6 +1335,7 @@ export default function App() {
   const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
   const [selectedVoiceStyle, setSelectedVoiceStyle] = useState('default');
   const [historyFilter, setHistoryFilter] = useState('all');
+  const [quickDateFilter, setQuickDateFilter] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarSelectedDate, setCalendarSelectedDate] = useState('');
   const [calendarNoteText, setCalendarNoteText] = useState('');
@@ -1449,10 +1494,17 @@ export default function App() {
         });
       }
     }
+    if (quickDateFilter) {
+      list = list.filter(note => {
+        const noteDay = String(note.eventAt || note.updatedAt || note.createdAt || '').slice(0, 10);
+        return noteDay === quickDateFilter;
+      });
+    }
     if (query.trim()) list = searchNotes(list, query);
     return list;
-  }, [data.notes, selectedFolder, query, historyFilter]);
+  }, [data.notes, selectedFolder, query, historyFilter, quickDateFilter]);
   const calendarMonths = useMemo(() => buildCalendarMonths(data.notes), [data.notes]);
+  const quickDateStrip = useMemo(() => buildQuickDateStrip(), []);
   const selectedNoteIndex = useMemo(
     () => visibleNotes.findIndex(note => note.id === selectedId),
     [visibleNotes, selectedId]
@@ -1673,11 +1725,16 @@ export default function App() {
     return true;
   }
 
+  function findLatestCompatibleShoppingList(folderName, items) {
+    const lists = [...data.notes]
+      .filter(note => note.folder === folderName && note.type === 'shopping_list')
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return lists.find(note => shouldAppendShoppingList(items, note)) || null;
+  }
+
   function appendToLatestShoppingList(folderName, items, rawText = '') {
     if (!folderName || !items?.length) return false;
-    const latestList = [...data.notes]
-      .filter(note => note.folder === folderName && note.type === 'shopping_list')
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    const latestList = findLatestCompatibleShoppingList(folderName, items);
     if (!latestList) return false;
 
     const mergedItems = [...new Set([...(latestList.items || []), ...items].map(item => String(item || '').trim()).filter(Boolean))];
@@ -1742,11 +1799,20 @@ export default function App() {
 
   function showPeriod(period) {
     setHistoryFilter(period);
+    setQuickDateFilter('');
     setSelectedFolder('Все');
     setQuery('');
     setSelectedId(null);
     const labels = { today: 'сегодня', yesterday: 'вчера', week: 'за неделю', all: 'все записи' };
     setStatusVoice(`Показываю записи ${labels[period] || 'за период'}.`, false);
+  }
+
+  function showQuickDate(isoDay) {
+    setHistoryFilter('all');
+    setQuickDateFilter(current => current === isoDay ? '' : isoDay);
+    setSelectedFolder('Все');
+    setQuery('');
+    setSelectedId(null);
   }
 
   function selectCalendarDate(date, options = {}) {
@@ -2192,6 +2258,15 @@ export default function App() {
       const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
       if (appendToLatestShoppingList(plan.folder || resolveSaveFolder(originalText, 'shopping_list', preferredFolder), appendItems, originalText)) return true;
     }
+    if (plan.action === 'save_shopping_list' && !isTimedShoppingCommand(originalText)) {
+      const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
+      if (isLikelyGroceryList(appendItems) && appendToLatestShoppingList(plan.folder || resolveSaveFolder(originalText, 'shopping_list', preferredFolder), appendItems, originalText)) return true;
+    }
+    if (plan.action === 'save_shopping_list' && isTimedShoppingCommand(originalText)) {
+      const note = createNoteFromLocalText(originalText, preferredFolder, reminderDefaults);
+      saveNote(note, Boolean(plan.showAfterSave || includesAny(originalText, ['выведи', 'покажи', 'открой', 'на экран'])));
+      return true;
+    }
     if (plan.action.startsWith('save_')) {
       const note = createNoteFromAI(plan, originalText, preferredFolder, reminderDefaults);
       saveNote(note, Boolean(plan.showAfterSave || includesAny(originalText, ['выведи', 'покажи', 'открой', 'на экран'])));
@@ -2345,10 +2420,22 @@ export default function App() {
 
       const intent = detectIntent(spoken);
       if (intent === 'save') {
+        if (isTimedShoppingCommand(spoken)) {
+          lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+          return saveNote(createNoteFromLocalText(spoken, preferredFolder, reminderDefaults), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
+        }
         if (isShoppingAppendCommand(spoken)) {
           const targetFolder = resolveSaveFolder(spoken, 'shopping_list', preferredFolder);
           const items = extractItems(spoken);
           if (appendToLatestShoppingList(targetFolder, items, spoken)) {
+            lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+            return;
+          }
+        }
+        if (inferType(spoken) === 'shopping_list') {
+          const targetFolder = resolveSaveFolder(spoken, 'shopping_list', preferredFolder);
+          const items = extractItems(spoken);
+          if (isLikelyGroceryList(items) && appendToLatestShoppingList(targetFolder, items, spoken)) {
             lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
             return;
           }
@@ -2649,11 +2736,18 @@ export default function App() {
           <span>Статус</span>
           <strong>{status}</strong>
           {suggestedFolder ? <button onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
-          <div className="history-chips">
-            <button className={historyFilter === 'today' ? 'active' : ''} onClick={() => showPeriod('today')}>Сегодня</button>
-            <button className={historyFilter === 'yesterday' ? 'active' : ''} onClick={() => showPeriod('yesterday')}>Вчера</button>
-            <button className={historyFilter === 'week' ? 'active' : ''} onClick={() => showPeriod('week')}>Неделя</button>
-            <button className={historyFilter === 'all' ? 'active' : ''} onClick={() => setHistoryFilter('all')}>За всё время</button>
+          <div className="quick-date-strip">
+            <button className={!quickDateFilter ? 'active' : ''} onClick={() => showQuickDate('')}>Все даты</button>
+            {quickDateStrip.map(item => (
+              <button
+                key={item.key}
+                className={quickDateFilter === item.isoDay ? 'active' : ''}
+                onClick={() => showQuickDate(item.isoDay)}
+              >
+                <span>{item.day}</span>
+                <small>{item.label}</small>
+              </button>
+            ))}
           </div>
         </div>
         <form className="manual" onSubmit={submitManual}>
