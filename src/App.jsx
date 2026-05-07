@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildReminderPoints, buildReminderSummary, isNotificationSupported } from './lib/notebookReminders';
+import { buildAppointmentNote, buildReminderPoints, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1476,13 +1476,13 @@ export default function App() {
 
   function ensureReminderReady(note) {
     if (!note || note.type !== 'appointment' || !note.eventAt) return;
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (!isNotificationSupported()) return;
     if (Notification.permission === 'granted') {
       setReminderSettings(prev => (prev.enabled ? prev : { ...prev, enabled: true }));
       return;
     }
     if (Notification.permission !== 'default') return;
-    Notification.requestPermission().then(result => {
+    requestNotificationPermission().then(result => {
       if (result === 'granted') {
         setReminderSettings(prev => ({ ...prev, enabled: true }));
         setStatusVoice(`Уведомления включены для записи ${note.title}.`, false);
@@ -1886,33 +1886,24 @@ export default function App() {
   }
 
   async function enableNotifications() {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
+    if (!isNotificationSupported()) {
       setStatusVoice('Этот браузер не поддерживает уведомления.', false);
       return;
     }
-    const result = await Notification.requestPermission();
+    const result = await requestNotificationPermission();
     if (result === 'granted') setStatusVoice('Уведомления разрешены.', false);
     else setStatusVoice('Разрешение на уведомления не выдано.', false);
   }
 
   async function toggleRemindersEnabled(nextValue) {
-    if (!nextValue) {
-      setReminderSettings(prev => ({ ...prev, enabled: false }));
-      setStatusVoice('Напоминания выключены.', false);
-      return;
-    }
-    if (typeof window === 'undefined' || !('Notification' in window)) {
+    const result = await enableReminderNotifications(nextValue);
+    if (result.status === 'unsupported') {
       setStatusVoice('Этот браузер не поддерживает уведомления.', false);
       return;
     }
-    if (Notification.permission !== 'granted') {
-      const result = await Notification.requestPermission();
-      if (result !== 'granted') {
-        setReminderSettings(prev => ({ ...prev, enabled: false }));
-        return setStatusVoice('Разрешение на уведомления не выдано.', false);
-      }
-    }
-    setReminderSettings(prev => ({ ...prev, enabled: true }));
+    setReminderSettings(prev => ({ ...prev, enabled: Boolean(result.enabled) }));
+    if (result.status === 'disabled') return setStatusVoice('Напоминания выключены.', false);
+    if (result.status !== 'granted') return setStatusVoice('Разрешение на уведомления не выдано.', false);
     setStatusVoice('Напоминания включены.', false);
   }
 

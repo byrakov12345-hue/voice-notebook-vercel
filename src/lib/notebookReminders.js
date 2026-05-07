@@ -29,6 +29,32 @@ export function isNotificationSupported() {
   return typeof window !== 'undefined' && 'Notification' in window;
 }
 
+export async function requestNotificationPermission() {
+  if (!isNotificationSupported()) return 'unsupported';
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return 'denied';
+  }
+}
+
+export async function enableReminderNotifications(nextValue) {
+  if (!nextValue) {
+    return { enabled: false, status: 'disabled' };
+  }
+  if (!isNotificationSupported()) {
+    return { enabled: false, status: 'unsupported' };
+  }
+  if (Notification.permission === 'granted') {
+    return { enabled: true, status: 'granted' };
+  }
+  const permission = await requestNotificationPermission();
+  if (permission === 'granted') {
+    return { enabled: true, status: 'granted' };
+  }
+  return { enabled: false, status: permission };
+}
+
 export function buildReminderSummary(reminderPlan, toLabel) {
   return reminderPlan.secondEnabled
     ? `${reminderPlan.firstEnabled ? toLabel(reminderPlan.morningTime) : '1-е выкл.'} и ${toLabel(reminderPlan.secondTime)}`
