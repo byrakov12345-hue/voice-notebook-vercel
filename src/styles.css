@@ -44,8 +44,25 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .calendar-compose-row { display: grid; grid-template-columns: 120px minmax(0,1fr) 140px; gap: 8px; }
 .calendar-compose-row input { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 10px 12px; }
 .calendar-reminder-label { display: flex; align-items: center; color: #94a3b8; font-size: 13px; }
-.calendar-list { display: grid; gap: 12px; max-height: 52vh; overflow: auto; }
-.calendar-month { border-radius: 18px; padding: 12px; background: rgba(255,255,255,0.05); display: grid; gap: 8px; }
+.calendar-list {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 4px;
+  padding: 4px 4px 10px;
+  overscroll-behavior-x: contain;
+}
+.calendar-month {
+  flex: 0 0 min(560px, calc(100vw - 72px));
+  scroll-snap-align: start;
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(255,255,255,0.05);
+  display: grid;
+  gap: 8px;
+}
 .calendar-month h3 { margin: 0; font-size: 18px; }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 6px; }
 .calendar-weekday { text-align: center; color: #94a3b8; font-size: 12px; padding: 4px 0; }
@@ -140,4 +157,5 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
   .note-list { max-height: none; }
   .reminder-grid { grid-template-columns: 1fr; }
   .calendar-compose-row { grid-template-columns: 1fr; }
+  .calendar-month { flex-basis: calc(100vw - 32px); }
 }
