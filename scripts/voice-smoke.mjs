@@ -26,6 +26,10 @@ const futureShopping = parseAppointmentDateTime('купить батон 9 ма�
 assert.equal(isoDay(futureShopping.eventAt), '2026-05-09');
 assert.equal(futureShopping.time, '20:00');
 
+const datedShoppingNoTime = parseAppointmentDateTime('8 мая купить в магазине батон', fixedNow);
+assert.equal(isoDay(datedShoppingNoTime.eventAt), '2026-05-08');
+assert.equal(datedShoppingNoTime.time, '');
+
 const openThisMonth = parseCalendarTargetDate('открой 5 число этого месяца', fixedNow);
 assert.equal(isoDay(openThisMonth?.toISOString()), '2026-05-05');
 

@@ -261,10 +261,14 @@ function hasDateOrTime(text) {
   const timeWords = ['утра', 'дня', 'вечера', 'ночи', 'час', 'часов', 'полдень', 'полночь'];
   const tokens = source.split(' ');
   const hasDateWord = dateWords.some(word => source.includes(word));
+  const hasCalendarDate =
+    /\b\d{1,2}\s+число(?:\s+этого\s+месяца)?\b/i.test(source) ||
+    /\b\d{1,2}\s+(?:число\s+)?(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i.test(source) ||
+    /\b(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\s+\d{1,2}(?:\s+число)?\b/i.test(source);
   const hasTimeWord = timeWords.some(word => source.includes(word));
   const hasClock = tokens.some(token => /^\d{1,2}[:.]\d{2}$/.test(token));
   const hasNumberBeforeTime = tokens.some((token, i) => !Number.isNaN(Number(token)) && timeWords.includes(tokens[i + 1]));
-  return hasDateWord || hasTimeWord || hasClock || hasNumberBeforeTime;
+  return hasDateWord || hasCalendarDate || hasTimeWord || hasClock || hasNumberBeforeTime;
 }
 
 function extractAppointmentTime(text) {
