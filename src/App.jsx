@@ -1732,6 +1732,42 @@ export default function App() {
       .sort((a, b) => new Date(a.eventAt).getTime() - new Date(b.eventAt).getTime());
   }
 
+  function findCalendarContextNote(dateIso = calendarSelectedDate) {
+    if (selectedNote?.type === 'appointment' && selectedNote.eventAt && String(selectedNote.eventAt).slice(0, 10) === String(dateIso || '').slice(0, 10)) {
+      return selectedNote;
+    }
+    return notesForCalendarDate(dateIso)[0] || null;
+  }
+
+  function updateCalendarAppointmentNote(noteId, content, timeValue, reminderPlan, dateIso) {
+    const selectedDate = new Date(dateIso);
+    const [hour, minute] = String(timeValue || '09:00').split(':').map(Number);
+    selectedDate.setHours(hour || 0, minute || 0, 0, 0);
+    const appointmentMeta = extractAppointmentMeta(content);
+    const folder = resolveFolderName(content, 'appointment');
+    updateNoteById(noteId, note => ({
+      ...note,
+      folder,
+      title: cleanTitle(content, note.title || 'Напоминание'),
+      content,
+      dateLabel: formatCalendarDateLabel(selectedDate),
+      time: timeValue,
+      eventAt: selectedDate.toISOString(),
+      reminderMorningTime: reminderPlan.morningTime,
+      reminderSecondTime: reminderPlan.secondEnabled ? reminderPlan.secondTime : '',
+      reminderSecondEnabled: reminderPlan.secondEnabled,
+      actionLabel: appointmentMeta.action || '',
+      placeLabel: appointmentMeta.place || '',
+      codeLabel: appointmentMeta.code || '',
+      tags: ['встреча', formatCalendarDateLabel(selectedDate), timeValue].filter(Boolean)
+    }));
+    setCalendarNoteText(content);
+    setCalendarNoteTime(timeValue);
+    setCalendarReminderMorningTime(reminderPlan.morningTime);
+    setCalendarReminderSecondTime(reminderPlan.secondTime || reminderSettings.secondReminderTime || '17:30');
+    setCalendarSecondReminderEnabled(reminderPlan.secondEnabled);
+  }
+
   function saveCalendarNote() {
     if (!calendarSelectedDate) return setStatusVoice('Сначала выберите дату в календаре.', false);
     const content = String(calendarNoteText || '').trim();
@@ -1843,7 +1879,22 @@ export default function App() {
         }));
         const reminderSummary = reminderPlan.secondEnabled ? `${timeToLabel(reminderOne)} и ${timeToLabel(reminderTwo)}` : timeToLabel(reminderOne);
         setStatusVoice(`Для ${formatCalendarDateLabel(selectedDate)} обновлены напоминания: ${reminderSummary}.`, false);
+      } else {
+        const reminderSummary = reminderPlan.secondEnabled ? `${timeToLabel(reminderOne)} и ${timeToLabel(reminderTwo)}` : timeToLabel(reminderOne);
+        setStatusVoice(`Дата ${formatCalendarDateLabel(selectedDate)} открыта. Напоминания для новой записи: ${reminderSummary}.`, false);
       }
+      return true;
+    }
+
+    const wantsUpdateExisting = includesAny(source, ['измени', 'обнови', 'поменяй', 'исправь']);
+    if (wantsUpdateExisting && sameDayNotes[0]) {
+      updateCalendarAppointmentNote(sameDayNotes[0].id, content, noteTime, {
+        morningTime: reminderOne,
+        secondTime: reminderTwo,
+        secondEnabled: reminderPlan.secondEnabled
+      }, targetDate.toISOString());
+      const reminderSummary = reminderPlan.secondEnabled ? `${timeToLabel(reminderOne)} и ${timeToLabel(reminderTwo)}` : timeToLabel(reminderOne);
+      setStatusVoice(`Запись на ${formatCalendarDateLabel(selectedDate)} обновлена. Напоминания: ${reminderSummary}.`, false);
       return true;
     }
 
@@ -1916,14 +1967,18 @@ export default function App() {
   function handleCalendarContextVoiceCommand(text) {
     if (!calendarSelectedDate) return false;
     const source = normalize(text);
-    if (!includesAny(source, ['сюда', 'туда', 'на эту дату', 'на выбранную дату', 'в этот день', 'в этот календарь'])) return false;
-    if (!includesAny(source, ['запиши', 'запомни', 'сохрани', 'добавь'])) return false;
+    const hasContextMarker = includesAny(source, ['сюда', 'туда', 'на эту дату', 'на выбранную дату', 'в этот день', 'в этот календарь']);
+    const wantsWrite = includesAny(source, ['запиши', 'запомни', 'сохрани', 'добавь', 'измени', 'обнови', 'поменяй', 'исправь']);
+    if (!hasContextMarker || !wantsWrite) return false;
 
     const content = stripCalendarVoiceContent(text)
       .replace(/\b(сюда|туда|на эту дату|на выбранную дату|в этот день|в этот календарь)\b/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
     if (!content) return false;
+
+    const existingNote = findCalendarContextNote(calendarSelectedDate);
+    const wantsUpdate = includesAny(source, ['измени', 'обнови', 'поменяй', 'исправь']);
 
     const reminderDefaults = {
       morningTime: calendarReminderMorningTime || reminderSettings.morningTime || '09:00',
@@ -1934,6 +1989,11 @@ export default function App() {
     const selectedDate = new Date(calendarSelectedDate);
     const [hour, minute] = String(calendarNoteTime || '09:00').split(':').map(Number);
     selectedDate.setHours(hour || 0, minute || 0, 0, 0);
+    if (wantsUpdate && existingNote) {
+      updateCalendarAppointmentNote(existingNote.id, content, String(calendarNoteTime || '09:00'), reminderDefaults, calendarSelectedDate);
+      setStatusVoice(`Обновил запись на ${formatCalendarDateLabel(selectedDate)}.`, false);
+      return true;
+    }
     const type = inferType(content);
     const folder = resolveFolderName(content, type === 'note' ? 'appointment' : type);
     const appointmentMeta = extractAppointmentMeta(content);
