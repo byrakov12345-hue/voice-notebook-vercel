@@ -884,6 +884,7 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
     const items = extractItems(content);
     if (isTimedShoppingCommand(text)) {
       const eventMeta = parseAppointmentDateTime(content);
+      const timedReminder = eventMeta.time || reminderDefaults.morningTime || '09:00';
       return {
         id: uid('note'),
         type: 'appointment',
@@ -894,10 +895,10 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
         dateLabel: eventMeta.dateLabel || formatCalendarDateLabel(new Date(eventMeta.eventAt || Date.now())),
         time: eventMeta.time || '09:00',
         eventAt: eventMeta.eventAt || new Date().toISOString(),
-        reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? true),
-        reminderMorningTime: reminderDefaults.morningTime || '09:00',
-        reminderSecondTime: reminderDefaults.secondEnabled ? (reminderDefaults.secondTime || '17:30') : '',
-        reminderSecondEnabled: Boolean(reminderDefaults.secondEnabled),
+        reminderFirstEnabled: true,
+        reminderMorningTime: timedReminder,
+        reminderSecondTime: '',
+        reminderSecondEnabled: false,
         tags: ['покупки', 'магазин', ...items],
         createdAt: now,
         updatedAt: now
