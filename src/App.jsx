@@ -354,6 +354,27 @@ function getPeriodRange(period) {
   return null;
 }
 
+function buildCalendarMonths(notes) {
+  const now = new Date();
+  return Array.from({ length: 60 }, (_, index) => {
+    const monthDate = new Date(now.getFullYear(), now.getMonth() + index, 1);
+    const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1, 0, 0, 0, 0);
+    const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    const items = notes
+      .filter(note => note.type === 'appointment' && note.eventAt)
+      .filter(note => {
+        const ts = new Date(note.eventAt).getTime();
+        return ts >= monthStart.getTime() && ts <= monthEnd.getTime();
+      })
+      .sort((a, b) => new Date(a.eventAt).getTime() - new Date(b.eventAt).getTime());
+    return {
+      key: `${monthDate.getFullYear()}-${monthDate.getMonth()}`,
+      title: new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(monthDate),
+      items
+    };
+  });
+}
+
 function cleanTitle(text, fallback = 'Заметка') {
   const value = String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь|создай|мне нужно|мне надо|нужно|надо|мне|хочу)\s*/i, '')
@@ -704,6 +725,10 @@ function createNoteFromAI(plan, fallbackText) {
 function detectIntent(text) {
   const source = normalize(text);
   if (includesAny(source, ['удали', 'удалить', 'очисти', 'сотри', 'стереть'])) return 'delete';
+  if (includesAny(source, ['переименуй', 'назови запись как'])) return 'rename';
+  if (includesAny(source, ['перемести это в', 'перенеси это в', 'перемести запись в', 'перенеси запись в'])) return 'move';
+  if (includesAny(source, ['измени последнюю запись', 'открой последнюю запись для изменения'])) return 'edit';
+  if (includesAny(source, ['добавь туда', 'добавь ещё туда', 'добавь еще туда', 'добавь в запись', 'добавь в список'])) return 'append';
   if (includesAny(source, ['скопируй', 'копируй', 'скопировать', 'в буфер', 'в буфер обмена'])) return 'copy';
   if (includesAny(source, ['поделись', 'поделиться', 'отправь', 'скинь'])) return 'share';
   if (includesAny(source, ['прочитай', 'зачитай', 'озвучь', 'продиктуй'])) return 'read';
@@ -752,6 +777,36 @@ function extractFolderListIndex(text) {
   const source = normalize(text);
   const match = source.match(/(?:спис(?:ок|ка)|запис(?:ь|и|ку))\s+(\d{1,3})/i);
   return match ? Number(match[1]) : null;
+}
+
+function extractRenameValue(text) {
+  const source = String(text || '').trim();
+  const quoted = source.match(/[«"']([^"»']+)[»"']/);
+  if (quoted?.[1]) return quoted[1].trim();
+  const plain = source.match(/(?:переименуй(?:\s+запись)?\s+в|назови(?:\s+запись)?\s+как)\s+(.+)$/i);
+  return plain?.[1]?.trim() || '';
+}
+
+function extractMoveFolderName(text) {
+  const source = String(text || '').trim();
+  const explicit = extractExplicitFolder(source);
+  if (explicit) return explicit;
+  const match = source.match(/(?:перемести|перенеси)\s+(?:это|запись|заметку|список)?\s*(?:в|во)\s+(.+)$/i);
+  return match?.[1] ? resolveExplicitFolderName(match[1].trim()) : '';
+}
+
+function extractListItemToRemove(text) {
+  const source = String(text || '').trim();
+  const match = source.match(/(?:удали|убери|вычеркни)\s+(?:из\s+списка\s+)?(.+)$/i);
+  return match?.[1]?.trim() || '';
+}
+
+function extractAppendText(text) {
+  return String(text || '')
+    .replace(/^(добавь|добавить)\s+/i, '')
+    .replace(/^(туда|сюда|в запись|в список)\s+/i, '')
+    .replace(/^(ещё|еще)\s+/i, '')
+    .trim();
 }
 
 function shareText(note) {
@@ -875,6 +930,10 @@ function localAIPlan(text, data, currentNote) {
     if (folderMatch) return { action: 'copy_folder_latest', folder: folderMatch.name, target: 'folder' };
     return { action: 'copy_current', target: 'current' };
   }
+  if (intent === 'rename') return { action: 'rename_current', title: extractRenameValue(text), target: 'current' };
+  if (intent === 'move') return { action: 'move_current', folder: extractMoveFolderName(text), target: 'current' };
+  if (intent === 'edit') return { action: 'edit_latest', target: 'latest' };
+  if (intent === 'append') return { action: 'append_current', content: extractAppendText(text), target: 'current' };
   if (intent === 'share') return { action: 'share_current', target: 'current' };
   if (intent === 'read') {
     const folderMatch = findFolderByText(data.folders, text);
@@ -992,20 +1051,23 @@ export default function App() {
   const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
   const [selectedVoiceStyle, setSelectedVoiceStyle] = useState('default');
   const [historyFilter, setHistoryFilter] = useState('all');
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [reminderSettings, setReminderSettings] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || '{}');
       return {
-        morningHour: Number(saved?.morningHour ?? 9),
+        morningTime: String(saved?.morningTime || '09:00'),
+        secondReminderHours: Number(saved?.secondReminderHours ?? 0),
         secondReminderMinutes: Number(saved?.secondReminderMinutes ?? 30)
       };
     } catch {
-      return { morningHour: 9, secondReminderMinutes: 30 };
+      return { morningTime: '09:00', secondReminderHours: 0, secondReminderMinutes: 30 };
     }
   });
   const useAI = true;
   const recognitionRef = useRef(null);
   const lastCommandRef = useRef({ text: '', at: 0 });
+  const lastSavedRef = useRef({ signature: '', at: 0 });
   const firedReminderRef = useRef(new Set());
 
   const selectedNote = data.notes.find(n => n.id === selectedId) || null;
@@ -1086,8 +1148,10 @@ export default function App() {
         const eventAt = new Date(note.eventAt);
         if (Number.isNaN(eventAt.getTime())) return;
         const morningAt = new Date(eventAt);
-        morningAt.setHours(reminderSettings.morningHour, 0, 0, 0);
-        const secondAt = new Date(eventAt.getTime() - reminderSettings.secondReminderMinutes * 60000);
+        const [morningHour, morningMinute] = String(reminderSettings.morningTime || '09:00').split(':').map(Number);
+        morningAt.setHours(morningHour || 0, morningMinute || 0, 0, 0);
+        const secondLeadMinutes = (Number(reminderSettings.secondReminderHours || 0) * 60) + Number(reminderSettings.secondReminderMinutes || 0);
+        const secondAt = new Date(eventAt.getTime() - secondLeadMinutes * 60000);
         if (Notification.permission === 'granted') {
           scheduleNotification(note, morningAt, 'morning');
           scheduleNotification(note, secondAt, 'before');
@@ -1114,6 +1178,7 @@ export default function App() {
     if (query.trim()) list = searchNotes(list, query);
     return list;
   }, [data.notes, selectedFolder, query, historyFilter]);
+  const calendarMonths = useMemo(() => buildCalendarMonths(data.notes), [data.notes]);
 
   function setStatusVoice(text, voice = true) {
     setStatus(text);
@@ -1182,6 +1247,78 @@ export default function App() {
     deleteNoteNow(target);
   }
 
+  function updateNoteById(noteId, updater) {
+    let updatedNote = null;
+    setData(prev => ({
+      ...prev,
+      notes: prev.notes.map(note => {
+        if (note.id !== noteId) return note;
+        updatedNote = {
+          ...updater(note),
+          updatedAt: new Date().toISOString()
+        };
+        return updatedNote;
+      })
+    }));
+    if (updatedNote) setSelectedId(updatedNote.id);
+  }
+
+  function openLatestForEdit() {
+    const latest = [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    if (!latest) return setStatusVoice('Пока нет записей для изменения.', false);
+    openNote(latest);
+    setStatusVoice(`Открыл для изменения: ${latest.title}.`, false);
+  }
+
+  function renameCurrentNote(nextTitle) {
+    if (!selectedNote) return setStatusVoice('Сначала откройте запись.', false);
+    if (!nextTitle) return setStatusVoice('Не понял новое название.', false);
+    updateNoteById(selectedNote.id, note => ({ ...note, title: capitalize(nextTitle) }));
+    setStatusVoice(`Переименовано в ${capitalize(nextTitle)}.`, false);
+  }
+
+  function moveCurrentNote(folderName) {
+    if (!selectedNote) return setStatusVoice('Сначала откройте запись.', false);
+    if (!folderName) return setStatusVoice('Не понял, в какую папку перенести.', false);
+    setData(prev => ({
+      folders: ensureFolder(prev.folders, folderName),
+      notes: prev.notes.map(note => note.id === selectedNote.id ? { ...note, folder: folderName, updatedAt: new Date().toISOString() } : note)
+    }));
+    setSelectedFolder(folderName);
+    setStatusVoice(`Перенёс в папку ${folderName}.`, false);
+  }
+
+  function appendToCurrentNote(content) {
+    if (!selectedNote) return setStatusVoice('Сначала откройте запись.', false);
+    const addition = String(content || '').trim();
+    if (!addition) return setStatusVoice('Не понял, что добавить.', false);
+    if (selectedNote.type === 'shopping_list') {
+      const items = extractItems(`купить ${addition}`);
+      return appendToLatestShoppingList(selectedNote.folder, items, addition);
+    }
+    updateNoteById(selectedNote.id, note => ({
+      ...note,
+      content: [note.content, addition].filter(Boolean).join('. '),
+      tags: [...new Set([...(note.tags || []), ...normalize(addition).split(' ').filter(w => w.length > 3).slice(0, 10)])]
+    }));
+    setStatusVoice('Добавил в текущую запись.', false);
+  }
+
+  function removeFromCurrentShoppingList(itemText) {
+    if (!selectedNote) return setStatusVoice('Сначала откройте запись.', false);
+    if (selectedNote.type !== 'shopping_list') return setStatusVoice('Сейчас открыта не shopping-запись.', false);
+    const target = normalize(itemText);
+    const nextItems = (selectedNote.items || []).filter(item => !normalize(item).includes(target));
+    if (nextItems.length === (selectedNote.items || []).length) return setStatusVoice('Не нашёл такой пункт в списке.', false);
+    updateNoteById(selectedNote.id, note => ({
+      ...note,
+      items: nextItems,
+      content: nextItems.join(', '),
+      title: note.title && note.title !== 'Покупки' ? note.title : deriveShoppingListTitle(nextItems, nextItems.join(', '))
+    }));
+    setStatusVoice('Пункт удалён из списка.', false);
+  }
+
   function clearNotebookNow() {
     if (!data.notes.length) return setStatusVoice('Блокнот уже пуст.', false);
     setData(prev => ({ ...prev, notes: [] }));
@@ -1191,13 +1328,21 @@ export default function App() {
   }
 
   function saveNote(note, showAfterSave = false) {
-    const freshWindowMs = 90000;
+    const freshWindowMs = 300000;
     let duplicateDetected = false;
+    const incomingSignature = noteSignature(note);
+    if (
+      lastSavedRef.current.signature === incomingSignature &&
+      Date.now() - lastSavedRef.current.at < freshWindowMs
+    ) {
+      setStatusVoice(`Такая запись уже только что сохранена в папку ${note.folder}.`, false);
+      return;
+    }
 
     setData(prev => {
       const nowTs = Date.now();
       const duplicate = prev.notes
-        .slice(0, 25)
+        .slice(0, 100)
         .find(existing => isSameOrNearDuplicate(existing, note) && nowTs - new Date(existing.createdAt).getTime() <= freshWindowMs);
 
       if (duplicate) {
@@ -1217,6 +1362,7 @@ export default function App() {
       return;
     }
 
+    lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
     setSuggestedFolder('');
@@ -1338,6 +1484,7 @@ export default function App() {
     const indexedFolder = findFolderByText(data.folders, text);
     const indexedNumber = extractFolderListIndex(text);
     if (indexedFolder && indexedNumber) return deleteFolderIndexedNote(indexedFolder.name, indexedNumber);
+    if (includesAny(source, ['удали из списка', 'убери из списка', 'вычеркни из списка'])) return removeFromCurrentShoppingList(extractListItemToRemove(text));
     if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'удали все с блокнота', 'удали всё с блокнота', 'очисти блокнот', 'очисти весь блокнот'])) return clearNotebookNow();
     if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) return setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false);
     if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали всё в папке', 'удали все с папки', 'удали всё с папки'])) {
@@ -1601,6 +1748,7 @@ export default function App() {
         </div>
         <div className="hero-actions">
           <button className="icon-button" onClick={() => setSettingsOpen(value => !value)} aria-label="Открыть настройки голоса">⚙</button>
+          <button className="icon-button" onClick={() => setCalendarOpen(value => !value)} aria-label="Открыть календарь">🗓</button>
           <button className={listening ? 'danger big' : 'primary big'} onClick={listening ? stopListening : startListening}>{listening ? 'Остановить' : 'Говорить'}</button>
         </div>
       </header>
@@ -1647,16 +1795,39 @@ export default function App() {
           <div className="reminder-grid">
             <label>
               <span>Утреннее напоминание</span>
-              <select value={reminderSettings.morningHour} onChange={e => setReminderSettings(prev => ({ ...prev, morningHour: Number(e.target.value) }))}>
-                {[7, 8, 9, 10, 11].map(hour => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}
-              </select>
+              <input type="time" value={reminderSettings.morningTime} onChange={e => setReminderSettings(prev => ({ ...prev, morningTime: e.target.value || '09:00' }))} />
             </label>
             <label>
-              <span>Второе напоминание</span>
-              <select value={reminderSettings.secondReminderMinutes} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderMinutes: Number(e.target.value) }))}>
-                {[15, 30, 45, 60, 120].map(minutes => <option key={minutes} value={minutes}>за {minutes} мин</option>)}
-              </select>
+              <span>Второе напоминание заранее</span>
+              <div className="reminder-inline">
+                <input type="number" min="0" max="23" value={reminderSettings.secondReminderHours} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderHours: Math.max(0, Math.min(23, Number(e.target.value) || 0)) }))} />
+                <small>ч</small>
+                <input type="number" min="0" max="59" value={reminderSettings.secondReminderMinutes} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderMinutes: Math.max(0, Math.min(59, Number(e.target.value) || 0)) }))} />
+                <small>мин</small>
+              </div>
             </label>
+          </div>
+        </section>
+      ) : null}
+
+      {calendarOpen ? (
+        <section className="settings-panel calendar-panel">
+          <div className="settings-head">
+            <strong>Календарь на 5 лет</strong>
+            <button onClick={() => setCalendarOpen(false)}>Закрыть</button>
+          </div>
+          <div className="calendar-list">
+            {calendarMonths.map(month => (
+              <div key={month.key} className="calendar-month">
+                <h3>{capitalize(month.title)}</h3>
+                {month.items.length ? month.items.map(note => (
+                  <button key={note.id} className="calendar-item" onClick={() => openNote(note)}>
+                    <strong>{note.title}</strong>
+                    <span>{[note.dateLabel, note.time, note.placeLabel].filter(Boolean).join(' · ')}</span>
+                  </button>
+                )) : <div className="folder-note-empty">Пока пусто</div>}
+              </div>
+            ))}
           </div>
         </section>
       ) : null}
@@ -1670,7 +1841,7 @@ export default function App() {
             <button className={historyFilter === 'today' ? 'active' : ''} onClick={() => showPeriod('today')}>Сегодня</button>
             <button className={historyFilter === 'yesterday' ? 'active' : ''} onClick={() => showPeriod('yesterday')}>Вчера</button>
             <button className={historyFilter === 'week' ? 'active' : ''} onClick={() => showPeriod('week')}>Неделя</button>
-            <button className={historyFilter === 'all' ? 'active' : ''} onClick={() => setHistoryFilter('all')}>Все</button>
+            <button className={historyFilter === 'all' ? 'active' : ''} onClick={() => setHistoryFilter('all')}>За всё время</button>
           </div>
         </div>
         <form className="manual" onSubmit={submitManual}>
