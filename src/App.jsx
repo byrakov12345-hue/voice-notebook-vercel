@@ -2747,7 +2747,7 @@ export default function App() {
       {calendarOpen ? (
         <section className="settings-panel calendar-panel">
           <div className="settings-head">
-            <strong>Календарь на 5 лет</strong>
+            <strong>Календарь</strong>
             <button onClick={() => setCalendarOpen(false)}>Закрыть</button>
           </div>
           <div className="calendar-compose">
