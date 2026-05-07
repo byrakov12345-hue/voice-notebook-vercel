@@ -1165,6 +1165,8 @@ export default function App() {
   const [calendarSelectedDate, setCalendarSelectedDate] = useState('');
   const [calendarNoteText, setCalendarNoteText] = useState('');
   const [calendarNoteTime, setCalendarNoteTime] = useState('09:00');
+  const [calendarReminderMorningTime, setCalendarReminderMorningTime] = useState('09:00');
+  const [calendarReminderSecondTime, setCalendarReminderSecondTime] = useState('17:30');
   const [reminderSettings, setReminderSettings] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || '{}');
@@ -1234,6 +1236,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(reminderSettings));
   }, [reminderSettings]);
+
+  useEffect(() => {
+    setCalendarReminderMorningTime(reminderSettings.morningTime || '09:00');
+    setCalendarReminderSecondTime(reminderSettings.secondReminderTime || '17:30');
+  }, [reminderSettings.morningTime, reminderSettings.secondReminderTime]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) return undefined;
@@ -1562,6 +1569,8 @@ export default function App() {
     if (!date) return;
     const iso = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0).toISOString();
     setCalendarSelectedDate(iso);
+    setCalendarReminderMorningTime(reminderSettings.morningTime || '09:00');
+    setCalendarReminderSecondTime(reminderSettings.secondReminderTime || '17:30');
     setStatusVoice(`Выбрана дата ${formatCalendarDateLabel(date)}.`, false);
   }
 
@@ -1584,6 +1593,8 @@ export default function App() {
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: String(calendarNoteTime || '09:00'),
       eventAt: selectedDate.toISOString(),
+      reminderMorningTime: calendarReminderMorningTime || reminderSettings.morningTime || '09:00',
+      reminderSecondTime: calendarReminderSecondTime || reminderSettings.secondReminderTime || '17:30',
       actionLabel: appointmentMeta.action || '',
       placeLabel: appointmentMeta.place || '',
       codeLabel: appointmentMeta.code || '',
@@ -1639,6 +1650,8 @@ export default function App() {
     };
     setCalendarSelectedDate(new Date(targetDate).toISOString());
     setCalendarNoteTime(noteTime);
+    setCalendarReminderMorningTime(reminderOne);
+    setCalendarReminderSecondTime(reminderTwo);
     setCalendarNoteText('');
     saveNote(note, true);
     setStatusVoice(`Сохранено на ${formatCalendarDateLabel(selectedDate)}. Напоминания: ${reminderOne} и ${reminderTwo}.`, false);
@@ -1854,7 +1867,11 @@ export default function App() {
       return setStatusVoice(`Папка ${folderName} создана или уже существует.`);
     }
 
-    if ((source.includes('число') || /\b\d{1,2}\s+(январ|феврал|март|апрел|мая|май|июн|июл|август|сентябр|октябр|ноябр|декабр)/i.test(source)) && startsWithAny(source, ['открой', 'запиши', 'запомни', 'сохрани', 'оставь', 'сделай', 'установи'])) {
+    if (
+      source.match(/\bна\s+\d{1,2}\s+число\b/i) ||
+      source.match(/\b\d{1,2}\s+число(?:\s+этого\s+месяца)?\b/i) ||
+      source.match(/\b\d{1,2}\s+(январ|феврал|март|апрел|мая|май|июн|июл|август|сентябр|октябр|ноябр|декабр)/i)
+    ) {
       if (handleCalendarVoiceCommand(spoken)) return;
     }
 
@@ -2080,6 +2097,11 @@ export default function App() {
               <input type="time" value={calendarNoteTime} onChange={e => setCalendarNoteTime(e.target.value || '09:00')} />
               <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на эту дату" />
               <button className="primary" onClick={saveCalendarNote}>Сохранить</button>
+            </div>
+            <div className="calendar-compose-row">
+              <input type="time" value={calendarReminderMorningTime} onChange={e => setCalendarReminderMorningTime(e.target.value || '09:00')} />
+              <input type="time" value={calendarReminderSecondTime} onChange={e => setCalendarReminderSecondTime(e.target.value || '17:30')} />
+              <div className="calendar-reminder-label">1-е и 2-е напоминание</div>
             </div>
           </div>
           <div className="calendar-list">
