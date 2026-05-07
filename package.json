@@ -10,7 +10,8 @@
     "dev": "vite --host 0.0.0.0",
     "dev:open": "vite --host 127.0.0.1 --port 3000",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "smoke:voice": "node scripts/voice-smoke.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "6.0.1",
