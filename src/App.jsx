@@ -1066,11 +1066,12 @@ export default function App() {
     try {
       const saved = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || '{}');
       return {
+        enabled: Boolean(saved?.enabled ?? false),
         morningTime: String(saved?.morningTime || '09:00'),
         secondReminderTime: String(saved?.secondReminderTime || '17:30')
       };
     } catch {
-      return { morningTime: '09:00', secondReminderTime: '17:30' };
+      return { enabled: false, morningTime: '09:00', secondReminderTime: '17:30' };
     }
   });
   const useAI = true;
@@ -1162,7 +1163,7 @@ export default function App() {
         const secondAt = new Date(eventAt);
         const [secondHour, secondMinute] = String(reminderSettings.secondReminderTime || '17:30').split(':').map(Number);
         secondAt.setHours(secondHour || 0, secondMinute || 0, 0, 0);
-        if (Notification.permission === 'granted') {
+        if (reminderSettings.enabled && Notification.permission === 'granted') {
           scheduleNotification(note, morningAt, 'morning');
           scheduleNotification(note, secondAt, 'before');
         }
@@ -1501,6 +1502,27 @@ export default function App() {
     else setStatusVoice('Разрешение на уведомления не выдано.', false);
   }
 
+  async function toggleRemindersEnabled(nextValue) {
+    if (!nextValue) {
+      setReminderSettings(prev => ({ ...prev, enabled: false }));
+      setStatusVoice('Напоминания выключены.', false);
+      return;
+    }
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setStatusVoice('Этот браузер не поддерживает уведомления.', false);
+      return;
+    }
+    if (Notification.permission !== 'granted') {
+      const result = await Notification.requestPermission();
+      if (result !== 'granted') {
+        setReminderSettings(prev => ({ ...prev, enabled: false }));
+        return setStatusVoice('Разрешение на уведомления не выдано.', false);
+      }
+    }
+    setReminderSettings(prev => ({ ...prev, enabled: true }));
+    setStatusVoice('Напоминания включены.', false);
+  }
+
   async function shareNote(note) {
     const text = shareText(note);
     if (navigator.share) {
@@ -1802,8 +1824,32 @@ export default function App() {
           <h1>АИ Блокнот</h1>
         </div>
         <div className="hero-actions">
-          <button className="icon-button" onClick={() => setSettingsOpen(value => !value)} aria-label="Открыть настройки голоса">⚙</button>
-          <button className="icon-button" onClick={() => setCalendarOpen(value => !value)} aria-label="Открыть календарь">🗓</button>
+          <button
+            className="icon-button"
+            onClick={() => {
+              setSettingsOpen(value => {
+                const next = !value;
+                if (next) setCalendarOpen(false);
+                return next;
+              });
+            }}
+            aria-label="Открыть настройки голоса"
+          >
+            ⚙
+          </button>
+          <button
+            className="icon-button"
+            onClick={() => {
+              setCalendarOpen(value => {
+                const next = !value;
+                if (next) setSettingsOpen(false);
+                return next;
+              });
+            }}
+            aria-label="Открыть календарь"
+          >
+            🗓
+          </button>
           <button className={listening ? 'danger big' : 'primary big'} onClick={listening ? stopListening : startListening}>{listening ? 'Остановить' : 'Говорить'}</button>
         </div>
       </header>
@@ -1845,7 +1891,10 @@ export default function App() {
           </div>
           <div className="settings-head">
             <strong>Напоминания</strong>
-            <button onClick={enableNotifications}>Разрешить</button>
+            <label className="switch">
+              <input type="checkbox" checked={Boolean(reminderSettings.enabled)} onChange={e => toggleRemindersEnabled(e.target.checked)} />
+              <span className="slider" />
+            </label>
           </div>
           <div className="reminder-grid">
             <label>
