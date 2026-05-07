@@ -827,6 +827,11 @@ function isTimedShoppingCommand(text) {
 function extractItems(text) {
   return String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь)\s*/i, '')
+    .replace(/^\d{1,2}\s+(?:число\s+)?(?:январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\s*/i, '')
+    .replace(/^на\s+\d{1,2}\s+число(?:\s+этого\s+месяца)?\s*/i, '')
+    .replace(/^\d{1,2}\s+число(?:\s+этого\s+месяца)?\s*/i, '')
+    .replace(/^\d{1,2}[:.]\d{2}\s*/i, '')
+    .replace(/^\d{1,2}\s+(утра|дня|вечера|ночи)\s*/i, '')
     .replace(/^(?:мне\s+)?(?:список покупок|список|купить|нужно купить|надо купить)[:\s-]*/i, '')
     .replace(/\s+и\s+/gi, ', ')
     .split(/[,.]/)
@@ -839,7 +844,7 @@ function deriveShoppingListTitle(items, text = '') {
   const source = normalize([text, ...normalizedItems].join(' '));
 
   const groups = [
-    { title: 'Еда', signals: ['хлеб', 'сахар', 'молоко', 'сыр', 'мяс', 'куриц', 'овощ', 'фрукт', 'еда', 'продукт', 'чай', 'кофе', 'круп', 'макарон'] },
+    { title: 'Еда', signals: ['хлеб', 'батон', 'сахар', 'молоко', 'сыр', 'мяс', 'куриц', 'овощ', 'фрукт', 'еда', 'продукт', 'чай', 'кофе', 'круп', 'макарон'] },
     { title: 'Транспорт', signals: ['мотоцикл', 'велосипед', 'самокат', 'машин', 'авто', 'транспорт', 'скутер'] },
     { title: 'Запчасти', signals: ['втулк', 'шина', 'колес', 'подшип', 'масл', 'фильтр', 'чехл', 'запчаст', 'свеч'] },
     { title: 'Дом', signals: ['ламп', 'мебел', 'посуда', 'подушк', 'ремонт', 'дом', 'квартир'] },
@@ -1823,7 +1828,26 @@ export default function App() {
     setSelectedFolder(note.folder);
     setSuggestedFolder('');
     setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
+    ensureReminderReady(note);
     return true;
+  }
+
+  function ensureReminderReady(note) {
+    if (!note || note.type !== 'appointment' || !note.eventAt) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      setReminderSettings(prev => (prev.enabled ? prev : { ...prev, enabled: true }));
+      return;
+    }
+    if (Notification.permission !== 'default') return;
+    Notification.requestPermission().then(result => {
+      if (result === 'granted') {
+        setReminderSettings(prev => ({ ...prev, enabled: true }));
+        setStatusVoice(`Уведомления включены для записи ${note.title}.`, false);
+      } else {
+        setStatusVoice('Чтобы напоминание пришло на телефон, разрешите уведомления в браузере.', false);
+      }
+    }).catch(() => {});
   }
 
   function findLatestCompatibleShoppingList(folderName, items) {
