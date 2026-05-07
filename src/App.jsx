@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildReminderPoints, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission } from './lib/notebookReminders';
+import { buildAppointmentNote, buildReminderDefaults, buildReminderPoints, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1974,12 +1974,7 @@ export default function App() {
   async function executePlan(plan, originalText) {
     if (!plan?.action || plan.action === 'unknown') return false;
     const preferredFolder = selectedFolder !== 'Все' ? selectedFolder : '';
-    const reminderDefaults = {
-      morningTime: reminderSettings.morningTime || '09:00',
-      firstEnabled: reminderSettings.firstReminderEnabled ?? true,
-      secondTime: reminderSettings.secondReminderTime || '17:30',
-      secondEnabled: reminderSettings.secondReminderEnabled ?? true
-    };
+    const reminderDefaults = buildReminderDefaults(reminderSettings);
     if (plan.action === 'save_shopping_list' && isShoppingAppendCommand(originalText)) {
       const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
       if (appendToLatestShoppingList(plan.folder || resolveSaveFolder(originalText, 'shopping_list', preferredFolder), appendItems, originalText)) return true;
@@ -2105,12 +2100,7 @@ export default function App() {
     setCommand(spoken);
     const source = normalizedSpoken;
     const preferredFolder = selectedFolder !== 'Все' ? selectedFolder : '';
-    const reminderDefaults = {
-      morningTime: reminderSettings.morningTime || '09:00',
-      firstEnabled: reminderSettings.firstReminderEnabled ?? true,
-      secondTime: reminderSettings.secondReminderTime || '17:30',
-      secondEnabled: reminderSettings.secondReminderEnabled ?? true
-    };
+    const reminderDefaults = buildReminderDefaults(reminderSettings);
     try {
       if (handleCalendarVoiceCommand(spoken)) {
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };

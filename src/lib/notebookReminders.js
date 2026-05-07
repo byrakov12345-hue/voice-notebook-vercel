@@ -97,3 +97,12 @@ export function buildAppointmentNote({
     updatedAt: now
   };
 }
+
+export function buildReminderDefaults(reminderSettings = {}) {
+  return {
+    morningTime: reminderSettings.morningTime || '09:00',
+    firstEnabled: reminderSettings.firstReminderEnabled ?? true,
+    secondTime: reminderSettings.secondReminderTime || '17:30',
+    secondEnabled: reminderSettings.secondReminderEnabled ?? true
+  };
+}
