@@ -1724,6 +1724,14 @@ export default function App() {
     setStatusVoice(`Выбрана дата ${formatCalendarDateLabel(date)}.`, false);
   }
 
+  function notesForCalendarDate(dateIso) {
+    if (!dateIso) return [];
+    const key = String(dateIso).slice(0, 10);
+    return [...data.notes]
+      .filter(note => note.type === 'appointment' && String(note.eventAt || '').slice(0, 10) === key)
+      .sort((a, b) => new Date(a.eventAt).getTime() - new Date(b.eventAt).getTime());
+  }
+
   function saveCalendarNote() {
     if (!calendarSelectedDate) return setStatusVoice('Сначала выберите дату в календаре.', false);
     const content = String(calendarNoteText || '').trim();
@@ -1764,22 +1772,31 @@ export default function App() {
     setSettingsOpen(false);
     selectCalendarDate(targetDate);
 
+    const sameDayNotes = notesForCalendarDate(targetDate.toISOString());
+    if (sameDayNotes[0]) {
+      setSelectedId(sameDayNotes[0].id);
+      setSelectedFolder(sameDayNotes[0].folder);
+      loadNoteIntoCalendar(sameDayNotes[0]);
+    }
+
     const source = normalize(text);
     const wantsSave =
       includesAny(source, ['запиши', 'запомни', 'сохрани', 'оставь напоминание', 'установи уведомление', 'сделай уведомление']) ||
       inferType(text) === 'appointment' ||
       includesAny(source, ['мне ', 'стриж', 'врач', 'встреч', 'прием', 'приём']);
-    if (!wantsSave) return true;
+    if (!wantsSave) {
+      if (sameDayNotes[0]) setStatusVoice(`Открыта дата ${formatCalendarDateLabel(targetDate)}. Найдено записей: ${sameDayNotes.length}.`, false);
+      return true;
+    }
 
     const content = stripCalendarVoiceContent(text);
-    if (!content) return true;
 
     const allTimes = extractAllTimes(text);
     const reminderPlan = parseReminderVoiceSettings(text, {
-      noteTime: allTimes[0] || calendarNoteTime || '09:00',
-      morningTime: reminderSettings.morningTime || '09:00',
-      secondTime: reminderSettings.secondReminderTime || '17:30',
-      secondEnabled: reminderSettings.secondReminderEnabled ?? true
+      noteTime: allTimes[0] || sameDayNotes[0]?.time || calendarNoteTime || '09:00',
+      morningTime: sameDayNotes[0]?.reminderMorningTime || reminderSettings.morningTime || '09:00',
+      secondTime: sameDayNotes[0]?.reminderSecondTime || reminderSettings.secondReminderTime || '17:30',
+      secondEnabled: sameDayNotes[0]?.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true
     });
     const noteTime = reminderPlan.noteTime || allTimes[0] || calendarNoteTime || '09:00';
     const reminderOne = reminderPlan.morningTime || reminderSettings.morningTime || '09:00';
@@ -1814,6 +1831,22 @@ export default function App() {
     setCalendarReminderMorningTime(reminderOne);
     setCalendarReminderSecondTime(reminderTwo);
     setCalendarSecondReminderEnabled(reminderPlan.secondEnabled);
+
+    if (!content) {
+      if (sameDayNotes[0]) {
+        updateNoteById(sameDayNotes[0].id, note => ({
+          ...note,
+          reminderMorningTime: reminderOne,
+          reminderSecondTime: reminderPlan.secondEnabled ? reminderTwo : '',
+          reminderSecondEnabled: reminderPlan.secondEnabled,
+          time: note.time || noteTime
+        }));
+        const reminderSummary = reminderPlan.secondEnabled ? `${timeToLabel(reminderOne)} и ${timeToLabel(reminderTwo)}` : timeToLabel(reminderOne);
+        setStatusVoice(`Для ${formatCalendarDateLabel(selectedDate)} обновлены напоминания: ${reminderSummary}.`, false);
+      }
+      return true;
+    }
+
     setCalendarNoteText('');
     const saved = saveNote(note, true);
     if (saved) {
@@ -1877,6 +1910,57 @@ export default function App() {
       ? `${timeToLabel(reminderPlan.morningTime)} и ${timeToLabel(reminderPlan.secondTime)}`
       : timeToLabel(reminderPlan.morningTime);
     setStatusVoice(`Настройки напоминаний обновлены: ${reminderSummary}.`, false);
+    return true;
+  }
+
+  function handleCalendarContextVoiceCommand(text) {
+    if (!calendarSelectedDate) return false;
+    const source = normalize(text);
+    if (!includesAny(source, ['сюда', 'туда', 'на эту дату', 'на выбранную дату', 'в этот день', 'в этот календарь'])) return false;
+    if (!includesAny(source, ['запиши', 'запомни', 'сохрани', 'добавь'])) return false;
+
+    const content = stripCalendarVoiceContent(text)
+      .replace(/\b(сюда|туда|на эту дату|на выбранную дату|в этот день|в этот календарь)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!content) return false;
+
+    const reminderDefaults = {
+      morningTime: calendarReminderMorningTime || reminderSettings.morningTime || '09:00',
+      secondTime: calendarReminderSecondTime || reminderSettings.secondReminderTime || '17:30',
+      secondEnabled: calendarSecondReminderEnabled
+    };
+
+    const selectedDate = new Date(calendarSelectedDate);
+    const [hour, minute] = String(calendarNoteTime || '09:00').split(':').map(Number);
+    selectedDate.setHours(hour || 0, minute || 0, 0, 0);
+    const type = inferType(content);
+    const folder = resolveFolderName(content, type === 'note' ? 'appointment' : type);
+    const appointmentMeta = extractAppointmentMeta(content);
+    const note = {
+      id: uid('note'),
+      type: 'appointment',
+      folder,
+      title: cleanTitle(content, 'Напоминание'),
+      content,
+      dateLabel: formatCalendarDateLabel(selectedDate),
+      time: String(calendarNoteTime || '09:00'),
+      eventAt: selectedDate.toISOString(),
+      reminderMorningTime: reminderDefaults.morningTime,
+      reminderSecondTime: reminderDefaults.secondEnabled ? reminderDefaults.secondTime : '',
+      reminderSecondEnabled: reminderDefaults.secondEnabled,
+      actionLabel: appointmentMeta.action || '',
+      placeLabel: appointmentMeta.place || '',
+      codeLabel: appointmentMeta.code || '',
+      tags: ['встреча', formatCalendarDateLabel(selectedDate), String(calendarNoteTime || '09:00')],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const saved = saveNote(note, true);
+    if (saved) {
+      setCalendarNoteText('');
+      setStatusVoice(`Добавил запись на ${formatCalendarDateLabel(selectedDate)}.`, false);
+    }
     return true;
   }
 
@@ -2105,6 +2189,14 @@ export default function App() {
       secondEnabled: reminderSettings.secondReminderEnabled ?? true
     };
     try {
+      if (handleCalendarVoiceCommand(spoken)) {
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
+      if (handleCalendarContextVoiceCommand(spoken)) {
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
       if (handleReminderVoiceCommand(spoken)) {
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return;
@@ -2117,17 +2209,6 @@ export default function App() {
         setSuggestedFolder('');
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return setStatusVoice(`Папка ${folderName} создана или уже существует.`);
-      }
-
-      if (
-        source.match(/\bна\s+\d{1,2}\s+число\b/i) ||
-        source.match(/\b\d{1,2}\s+число(?:\s+этого\s+месяца)?\b/i) ||
-        source.match(/\b\d{1,2}\s+(январ|феврал|март|апрел|мая|май|июн|июл|август|сентябр|октябр|ноябр|декабр)/i)
-      ) {
-        if (handleCalendarVoiceCommand(spoken)) {
-          lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
-          return;
-        }
       }
 
       if (useAI) {
