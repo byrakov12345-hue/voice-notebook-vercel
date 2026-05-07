@@ -31,8 +31,10 @@ import {
 import {
   buildCalendarMonths,
   buildQuickDateStrip,
+  findCalendarContextNote as findCalendarContextNoteByDate,
   formatCalendarDateLabel,
-  getPeriodRange
+  getPeriodRange,
+  notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
 import { buildAppointmentNote, buildReminderPoints, buildReminderSummary, isNotificationSupported } from './lib/notebookReminders';
 import {
@@ -1601,18 +1603,11 @@ export default function App() {
   }
 
   function notesForCalendarDate(dateIso) {
-    if (!dateIso) return [];
-    const key = String(dateIso).slice(0, 10);
-    return [...data.notes]
-      .filter(note => note.type === 'appointment' && String(note.eventAt || '').slice(0, 10) === key)
-      .sort((a, b) => new Date(a.eventAt).getTime() - new Date(b.eventAt).getTime());
+    return notesForCalendarDateByDate(data.notes, dateIso);
   }
 
   function findCalendarContextNote(dateIso = calendarSelectedDate) {
-    if (selectedNote?.type === 'appointment' && selectedNote.eventAt && String(selectedNote.eventAt).slice(0, 10) === String(dateIso || '').slice(0, 10)) {
-      return selectedNote;
-    }
-    return notesForCalendarDate(dateIso)[0] || null;
+    return findCalendarContextNoteByDate(data.notes, selectedNote, dateIso);
   }
 
   function updateCalendarAppointmentNote(noteId, content, timeValue, reminderPlan, dateIso) {

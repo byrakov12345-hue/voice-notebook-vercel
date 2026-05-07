@@ -64,3 +64,22 @@ export function buildQuickDateStrip() {
     };
   });
 }
+
+export function notesForCalendarDate(notes, dateIso) {
+  if (!dateIso) return [];
+  const key = String(dateIso).slice(0, 10);
+  return [...notes]
+    .filter(note => note.type === 'appointment' && String(note.eventAt || '').slice(0, 10) === key)
+    .sort((a, b) => new Date(a.eventAt).getTime() - new Date(b.eventAt).getTime());
+}
+
+export function findCalendarContextNote(notes, selectedNote, dateIso) {
+  if (
+    selectedNote?.type === 'appointment' &&
+    selectedNote.eventAt &&
+    String(selectedNote.eventAt).slice(0, 10) === String(dateIso || '').slice(0, 10)
+  ) {
+    return selectedNote;
+  }
+  return notesForCalendarDate(notes, dateIso)[0] || null;
+}
