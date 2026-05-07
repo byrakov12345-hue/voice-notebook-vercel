@@ -5,6 +5,7 @@ const STORAGE_KEY = 'smart_voice_notebook_live_v2';
 const LEGACY_STORAGE_KEYS = ['smart_voice_notebook_live_v1'];
 const VOICE_STORAGE_KEY = 'smart_voice_notebook_voice_v1';
 const VOICE_STYLE_STORAGE_KEY = 'smart_voice_notebook_voice_style_v1';
+const REMINDER_STORAGE_KEY = 'smart_voice_notebook_reminders_v1';
 
 const DEFAULT_FOLDERS = [
   'Идеи', 'Встречи', 'Покупки', 'Задачи', 'Контакты', 'Коды и комбинации',
@@ -274,6 +275,83 @@ function extractAppointmentDateLabel(text) {
   if (source.includes('сегодня')) return 'сегодня';
   const weekdays = ['понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу', 'воскресенье'];
   return weekdays.find(day => source.includes(day)) || '';
+}
+
+function parseAppointmentDateTime(text) {
+  const source = normalize(text);
+  const now = new Date();
+  const months = {
+    января: 0, феврал: 1, марта: 2, апрел: 3, мая: 4, июня: 5,
+    июля: 6, августа: 7, сентября: 8, октября: 9, ноября: 10, декабря: 11
+  };
+  let eventDate = null;
+
+  const monthMatch = source.match(/\b(\d{1,2})\s+(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i);
+  if (monthMatch) {
+    const day = Number(monthMatch[1]);
+    const monthKey = Object.keys(months).find(key => monthMatch[2].startsWith(key.slice(0, 5)));
+    if (day && monthKey) {
+      let year = now.getFullYear();
+      const probe = new Date(year, months[monthKey], day, 12, 0, 0, 0);
+      if (probe.getTime() < now.getTime() - 86400000) year += 1;
+      eventDate = new Date(year, months[monthKey], day, 12, 0, 0, 0);
+    }
+  } else if (source.includes('послезавтра')) {
+    eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2, 12, 0, 0, 0);
+  } else if (source.includes('завтра')) {
+    eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12, 0, 0, 0);
+  } else if (source.includes('сегодня')) {
+    eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  }
+
+  const time = extractAppointmentTime(text);
+  if (eventDate && time) {
+    const [hour, minute] = time.split(':').map(Number);
+    eventDate.setHours(hour || 0, minute || 0, 0, 0);
+  }
+
+  return {
+    dateLabel: extractAppointmentDateLabel(text),
+    time,
+    eventAt: eventDate ? eventDate.toISOString() : ''
+  };
+}
+
+function extractAppointmentMeta(text) {
+  const source = String(text || '').trim();
+  const codeMatch = source.match(/код\s+([0-9]{2,})/i);
+  const actionMatch = source.match(/(?:нужно|надо|мне)\s+(.+?)(?:,|$)/i) || source.match(/(?:завтра|сегодня|послезавтра|\d{1,2}\s+[А-Яа-я]+)\s+(.+?)(?:,|$)/i);
+  const placeMatch = source.match(/\b(?:на|в)\s+([А-Яа-яA-Za-z0-9][^,]+?)(?:\s+код|\s+в\s+\d|\s*$)/i);
+  return {
+    action: actionMatch?.[1]?.trim() || '',
+    place: placeMatch?.[1]?.trim() || '',
+    code: codeMatch?.[1] || ''
+  };
+}
+
+function getPeriodRange(period) {
+  const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
+  if (period === 'today') {
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+  if (period === 'yesterday') {
+    start.setDate(start.getDate() - 1);
+    end.setDate(end.getDate() - 1);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+  if (period === 'week') {
+    start.setDate(start.getDate() - 7);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+  return null;
 }
 
 function cleanTitle(text, fallback = 'Заметка') {
@@ -554,15 +632,17 @@ function createNoteFromLocalText(text) {
   }
 
   if (type === 'appointment') {
-    const time = extractAppointmentTime(content);
-    const dateLabel = extractAppointmentDateLabel(content);
+    const eventMeta = parseAppointmentDateTime(content);
+    const appointmentMeta = extractAppointmentMeta(content);
     let title = 'Встреча';
     if (normalize(content).includes('стриж')) title = 'Стрижка';
     else if (normalize(content).includes('врач')) title = 'Врач';
     else title = cleanTitle(content, 'Встреча');
     return {
       id: uid('note'), type, folder, title, content,
-      dateLabel, time, tags: ['встреча', dateLabel, time, ...tags].filter(Boolean), createdAt: now, updatedAt: now
+      dateLabel: eventMeta.dateLabel, time: eventMeta.time, eventAt: eventMeta.eventAt,
+      actionLabel: appointmentMeta.action, placeLabel: appointmentMeta.place, codeLabel: appointmentMeta.code,
+      tags: ['встреча', eventMeta.dateLabel, eventMeta.time, appointmentMeta.place, appointmentMeta.code, ...tags].filter(Boolean), createdAt: now, updatedAt: now
     };
   }
 
@@ -598,7 +678,24 @@ function createNoteFromAI(plan, fallbackText) {
   }
 
   if (type === 'appointment') {
-    return { id: uid('note'), type, folder: plan.folder || resolveFolderName(fallbackText, type), title: plan.title || cleanTitle(plan.content || fallbackText, 'Встреча'), content: plan.content || fallbackText, dateLabel: plan.dateLabel || extractAppointmentDateLabel(fallbackText), time: plan.time || extractAppointmentTime(fallbackText), tags: ['встреча', ...(plan.tags || [])], createdAt: now, updatedAt: now };
+    const eventMeta = parseAppointmentDateTime(plan.content || fallbackText);
+    const appointmentMeta = extractAppointmentMeta(plan.content || fallbackText);
+    return {
+      id: uid('note'),
+      type,
+      folder: plan.folder || resolveFolderName(fallbackText, type),
+      title: plan.title || cleanTitle(plan.content || fallbackText, 'Встреча'),
+      content: plan.content || fallbackText,
+      dateLabel: plan.dateLabel || eventMeta.dateLabel,
+      time: plan.time || eventMeta.time,
+      eventAt: plan.eventAt || eventMeta.eventAt,
+      actionLabel: plan.actionLabel || appointmentMeta.action,
+      placeLabel: plan.placeLabel || appointmentMeta.place,
+      codeLabel: plan.codeLabel || appointmentMeta.code,
+      tags: ['встреча', ...(plan.tags || [])],
+      createdAt: now,
+      updatedAt: now
+    };
   }
 
   return { id: uid('note'), type, folder: plan.folder || resolveFolderName(fallbackText, type), title: plan.title || cleanTitle(plan.content || fallbackText, TYPE_LABELS[type] || 'Заметка'), content: plan.content || fallbackText, tags: Array.isArray(plan.tags) ? plan.tags : [], createdAt: now, updatedAt: now };
@@ -614,6 +711,7 @@ function detectIntent(text) {
   if (startsWithAny(source, ['позвони', 'набери'])) return 'call';
   if (startsWithAny(source, ['напиши', 'смс', 'sms', 'whatsapp', 'ватсап', 'вацап'])) return 'message';
   if (includesAny(source, ['покажи послед', 'выведи послед', 'последнюю заметку', 'что я только что записал'])) return 'show_latest';
+  if (includesAny(source, ['что я записывал сегодня', 'покажи вчерашние записи', 'что я сохранял на этой неделе', 'за вчера', 'за сегодня', 'на этой неделе'])) return 'history';
   if (includesAny(source, ['найди', 'найти', 'поищи', 'поиск', 'что я записывал'])) return 'search';
   if (includesAny(source, ['создай папку', 'создать папку'])) return 'create_folder';
   if (includesAny(source, ['запомни', 'запиши', 'сохрани', 'добавь', 'нужно запомнить', 'надо запомнить'])) return 'save';
@@ -793,6 +891,11 @@ function localAIPlan(text, data, currentNote) {
   if (intent === 'call') return { action: 'call_contact', query: text, target: includesAny(source, ['ему', 'ей', 'этому']) ? 'current' : 'specific' };
   if (intent === 'message') return { action: 'message_contact', query: text, target: includesAny(source, ['ему', 'ей', 'этому']) ? 'current' : 'specific' };
   if (intent === 'show_latest') return { action: 'show_latest_note', query: text, target: 'latest' };
+  if (intent === 'history') {
+    if (includesAny(source, ['вчера', 'вчераш'])) return { action: 'show_period', period: 'yesterday' };
+    if (includesAny(source, ['неделе', 'неделя'])) return { action: 'show_period', period: 'week' };
+    return { action: 'show_period', period: 'today' };
+  }
   if (intent === 'search') return { action: 'search_notes', query: text };
 
   if (intent === 'create_folder') {
@@ -850,7 +953,13 @@ function NoteCard({ note, selected, onOpen, onShare, onCopy, onDelete, onCall, o
         ) : note.type === 'contact' ? (
           <p><b>Телефон:</b> {note.phone || 'не распознан'}{note.description ? <><br /><b>Описание:</b> {note.description}</> : null}</p>
         ) : note.type === 'appointment' ? (
-          <p><b>Когда:</b> {[note.dateLabel, note.time].filter(Boolean).join(', ') || 'не указано'}<br />{note.content}</p>
+          <p>
+            <b>Когда:</b> {[note.dateLabel, note.time].filter(Boolean).join(', ') || 'не указано'}
+            {note.actionLabel ? <><br /><b>Действие:</b> {note.actionLabel}</> : null}
+            {note.placeLabel ? <><br /><b>Место:</b> {note.placeLabel}</> : null}
+            {note.codeLabel ? <><br /><b>Код:</b> {note.codeLabel}</> : null}
+            <br />{note.content}
+          </p>
         ) : (
           !hasDuplicateBody ? <p>{note.content}</p> : null
         )}
@@ -882,9 +991,22 @@ export default function App() {
   const [voiceOptions, setVoiceOptions] = useState([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
   const [selectedVoiceStyle, setSelectedVoiceStyle] = useState('default');
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [reminderSettings, setReminderSettings] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || '{}');
+      return {
+        morningHour: Number(saved?.morningHour ?? 9),
+        secondReminderMinutes: Number(saved?.secondReminderMinutes ?? 30)
+      };
+    } catch {
+      return { morningHour: 9, secondReminderMinutes: 30 };
+    }
+  });
   const useAI = true;
   const recognitionRef = useRef(null);
   const lastCommandRef = useRef({ text: '', at: 0 });
+  const firedReminderRef = useRef(new Set());
 
   const selectedNote = data.notes.find(n => n.id === selectedId) || null;
   const speechSupported = Boolean(SpeechRecognition);
@@ -934,12 +1056,64 @@ export default function App() {
     localStorage.setItem(VOICE_STYLE_STORAGE_KEY, selectedVoiceStyle);
   }, [selectedVoiceStyle]);
 
+  useEffect(() => {
+    localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(reminderSettings));
+  }, [reminderSettings]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return undefined;
+    const timeouts = [];
+    const scheduleNotification = (note, remindAt, label) => {
+      const delay = remindAt.getTime() - Date.now();
+      if (delay <= 0) return;
+      const key = `${note.id}_${label}_${remindAt.toISOString()}`;
+      if (firedReminderRef.current.has(key)) return;
+      const timeoutId = window.setTimeout(() => {
+        firedReminderRef.current.add(key);
+        if (Notification.permission === 'granted') {
+          new Notification(note.title || 'Напоминание', {
+            body: [note.dateLabel, note.time, note.placeLabel || note.content].filter(Boolean).join(' · ')
+          });
+        }
+        speak(`Напоминание: ${note.title}.`, selectedVoiceURI, selectedVoiceStyle);
+      }, delay);
+      timeouts.push(timeoutId);
+    };
+
+    data.notes
+      .filter(note => note.type === 'appointment' && note.eventAt)
+      .forEach(note => {
+        const eventAt = new Date(note.eventAt);
+        if (Number.isNaN(eventAt.getTime())) return;
+        const morningAt = new Date(eventAt);
+        morningAt.setHours(reminderSettings.morningHour, 0, 0, 0);
+        const secondAt = new Date(eventAt.getTime() - reminderSettings.secondReminderMinutes * 60000);
+        if (Notification.permission === 'granted') {
+          scheduleNotification(note, morningAt, 'morning');
+          scheduleNotification(note, secondAt, 'before');
+        }
+      });
+
+    return () => {
+      timeouts.forEach(id => window.clearTimeout(id));
+    };
+  }, [data.notes, reminderSettings, selectedVoiceStyle, selectedVoiceURI]);
+
   const visibleNotes = useMemo(() => {
     let list = [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     if (selectedFolder !== 'Все') list = list.filter(n => n.folder === selectedFolder);
+    if (historyFilter !== 'all') {
+      const range = getPeriodRange(historyFilter);
+      if (range) {
+        list = list.filter(note => {
+          const ts = new Date(note.updatedAt || note.createdAt).getTime();
+          return ts >= range.start.getTime() && ts <= range.end.getTime();
+        });
+      }
+    }
     if (query.trim()) list = searchNotes(list, query);
     return list;
-  }, [data.notes, selectedFolder, query]);
+  }, [data.notes, selectedFolder, query, historyFilter]);
 
   function setStatusVoice(text, voice = true) {
     setStatus(text);
@@ -1115,6 +1289,25 @@ export default function App() {
     setStatusVoice(`Показываю последнюю запись: ${latest.title}.`);
   }
 
+  function showPeriod(period) {
+    setHistoryFilter(period);
+    setSelectedFolder('Все');
+    setQuery('');
+    setSelectedId(null);
+    const labels = { today: 'сегодня', yesterday: 'вчера', week: 'за неделю', all: 'все записи' };
+    setStatusVoice(`Показываю записи ${labels[period] || 'за период'}.`, false);
+  }
+
+  async function enableNotifications() {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setStatusVoice('Этот браузер не поддерживает уведомления.', false);
+      return;
+    }
+    const result = await Notification.requestPermission();
+    if (result === 'granted') setStatusVoice('Уведомления разрешены.', false);
+    else setStatusVoice('Разрешение на уведомления не выдано.', false);
+  }
+
   async function shareNote(note) {
     const text = shareText(note);
     if (navigator.share) {
@@ -1188,6 +1381,7 @@ export default function App() {
       saveNote(note, Boolean(plan.showAfterSave || includesAny(originalText, ['выведи', 'покажи', 'открой', 'на экран'])));
       return true;
     }
+    if (plan.action === 'show_period') { showPeriod(plan.period || 'today'); return true; }
     if (plan.action === 'search_notes') { performSearch(plan.query || originalText); return true; }
     if (plan.action === 'show_latest_note') { showLatest(plan.query || originalText); return true; }
     if (plan.action === 'create_folder') {
@@ -1302,6 +1496,11 @@ export default function App() {
         if (appendToLatestShoppingList(targetFolder, items, spoken)) return;
       }
       return saveNote(createNoteFromLocalText(spoken), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
+    }
+    if (intent === 'history') {
+      if (includesAny(spoken, ['вчера', 'вчераш'])) return showPeriod('yesterday');
+      if (includesAny(spoken, ['неделе', 'неделя'])) return showPeriod('week');
+      return showPeriod('today');
     }
     if (intent === 'search') return performSearch(spoken);
     if (intent === 'show_latest') return showLatest(spoken);
@@ -1441,6 +1640,24 @@ export default function App() {
               </button>
             )) : <div className="folder-note-empty">Голоса браузера пока не загрузились</div>}
           </div>
+          <div className="settings-head">
+            <strong>Напоминания</strong>
+            <button onClick={enableNotifications}>Разрешить</button>
+          </div>
+          <div className="reminder-grid">
+            <label>
+              <span>Утреннее напоминание</span>
+              <select value={reminderSettings.morningHour} onChange={e => setReminderSettings(prev => ({ ...prev, morningHour: Number(e.target.value) }))}>
+                {[7, 8, 9, 10, 11].map(hour => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Второе напоминание</span>
+              <select value={reminderSettings.secondReminderMinutes} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderMinutes: Number(e.target.value) }))}>
+                {[15, 30, 45, 60, 120].map(minutes => <option key={minutes} value={minutes}>за {minutes} мин</option>)}
+              </select>
+            </label>
+          </div>
         </section>
       ) : null}
 
@@ -1449,6 +1666,12 @@ export default function App() {
           <span>Статус</span>
           <strong>{status}</strong>
           {suggestedFolder ? <button onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
+          <div className="history-chips">
+            <button className={historyFilter === 'today' ? 'active' : ''} onClick={() => showPeriod('today')}>Сегодня</button>
+            <button className={historyFilter === 'yesterday' ? 'active' : ''} onClick={() => showPeriod('yesterday')}>Вчера</button>
+            <button className={historyFilter === 'week' ? 'active' : ''} onClick={() => showPeriod('week')}>Неделя</button>
+            <button className={historyFilter === 'all' ? 'active' : ''} onClick={() => setHistoryFilter('all')}>Все</button>
+          </div>
         </div>
         <form className="manual" onSubmit={submitManual}>
           <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду или нажмите «Говорить»" />

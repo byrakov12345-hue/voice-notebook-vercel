@@ -28,6 +28,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .voice-option.active { background: #f8fafc; color: #020617; font-weight: 800; }
 .voice-option small { color: #94a3b8; }
 .voice-option.active small { color: rgba(2,6,23,0.65); }
+.reminder-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.reminder-grid label { display: grid; gap: 6px; font-size: 14px; color: #cbd5e1; }
+.reminder-grid select { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 10px 12px; }
 
 button, .button { color: #f8fafc; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 16px; transition: transform .12s ease, background .12s ease; }
 button:hover { background: rgba(255,255,255,0.16); transform: translateY(-1px); }
@@ -40,6 +43,8 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .status-card span { display: block; text-transform: uppercase; letter-spacing: .12em; color: #94a3b8; font-size: 12px; margin-bottom: 8px; }
 .status-card strong { display: block; font-size: 18px; }
 .status-card small { display: block; color: #94a3b8; margin-top: 6px; }
+.history-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.history-chips button.active { background: #f8fafc; color: #020617; font-weight: 800; }
 .toggle { display: flex; align-items: center; gap: 10px; font-weight: 800; }
 .toggle input { width: 20px; height: 20px; }
 .manual { display: flex; gap: 10px; align-items: center; }
@@ -108,4 +113,5 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
   .folders { position: static; max-height: none; }
   .notes-head { flex-direction: column; align-items: stretch; }
   .note-list { max-height: none; }
+  .reminder-grid { grid-template-columns: 1fr; }
 }
