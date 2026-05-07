@@ -1531,6 +1531,10 @@ export default function App() {
     if (plan.action === 'show_period') { showPeriod(plan.period || 'today'); return true; }
     if (plan.action === 'search_notes') { performSearch(plan.query || originalText); return true; }
     if (plan.action === 'show_latest_note') { showLatest(plan.query || originalText); return true; }
+    if (plan.action === 'edit_latest') { openLatestForEdit(); return true; }
+    if (plan.action === 'rename_current') { renameCurrentNote(plan.title); return true; }
+    if (plan.action === 'move_current') { moveCurrentNote(plan.folder); return true; }
+    if (plan.action === 'append_current') { appendToCurrentNote(plan.content); return true; }
     if (plan.action === 'create_folder') {
       const folderName = plan.folder || cleanTitle(originalText.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
       setData(prev => ({ ...prev, folders: ensureFolder(prev.folders, folderName) }));
@@ -1649,6 +1653,10 @@ export default function App() {
       if (includesAny(spoken, ['неделе', 'неделя'])) return showPeriod('week');
       return showPeriod('today');
     }
+    if (intent === 'edit') return openLatestForEdit();
+    if (intent === 'rename') return renameCurrentNote(extractRenameValue(spoken));
+    if (intent === 'move') return moveCurrentNote(extractMoveFolderName(spoken));
+    if (intent === 'append') return appendToCurrentNote(extractAppendText(spoken));
     if (intent === 'search') return performSearch(spoken);
     if (intent === 'show_latest') return showLatest(spoken);
     if (intent === 'delete') return handleDelete(spoken);
