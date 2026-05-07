@@ -607,6 +607,7 @@ function createNoteFromAI(plan, fallbackText) {
 function detectIntent(text) {
   const source = normalize(text);
   if (includesAny(source, ['удали', 'удалить', 'очисти', 'сотри', 'стереть'])) return 'delete';
+  if (includesAny(source, ['скопируй', 'копируй', 'скопировать', 'в буфер', 'в буфер обмена'])) return 'copy';
   if (includesAny(source, ['поделись', 'поделиться', 'отправь', 'скинь'])) return 'share';
   if (includesAny(source, ['прочитай', 'зачитай', 'озвучь', 'продиктуй'])) return 'read';
   if (includesAny(source, ['открой папку', 'покажи папку', 'перейди в папку'])) return 'open_folder';
@@ -647,6 +648,12 @@ function searchNotes(notes, query) {
 function findFolderByText(folders, text) {
   const source = normalize(text);
   return folders.find(folder => source.includes(normalize(folder.name))) || null;
+}
+
+function extractFolderListIndex(text) {
+  const source = normalize(text);
+  const match = source.match(/(?:спис(?:ок|ка)|запис(?:ь|и|ку))\s+(\d{1,3})/i);
+  return match ? Number(match[1]) : null;
 }
 
 function shareText(note) {
@@ -737,6 +744,11 @@ function localAIPlan(text, data, currentNote) {
   const showAfterSave = includesAny(source, ['выведи', 'покажи', 'открой', 'на экран']);
 
   if (intent === 'delete') {
+    const folderMatch = findFolderByText(data.folders, text);
+    const listIndex = extractFolderListIndex(text);
+    if (folderMatch && listIndex) {
+      return { action: 'delete_folder_indexed_note', folder: folderMatch.name, index: listIndex, target: 'folder_index' };
+    }
     if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) {
       return { action: 'delete_trash', target: 'trash' };
     }
@@ -760,6 +772,11 @@ function localAIPlan(text, data, currentNote) {
     return { action: 'delete_note', target: 'specific', query: text };
   }
 
+  if (intent === 'copy') {
+    const folderMatch = findFolderByText(data.folders, text);
+    if (folderMatch) return { action: 'copy_folder_latest', folder: folderMatch.name, target: 'folder' };
+    return { action: 'copy_current', target: 'current' };
+  }
   if (intent === 'share') return { action: 'share_current', target: 'current' };
   if (intent === 'read') {
     const folderMatch = findFolderByText(data.folders, text);
@@ -981,6 +998,16 @@ export default function App() {
     setStatusVoice(`Папка ${folderName} удалена.`, false);
   }
 
+  function deleteFolderIndexedNote(folderName, displayIndex) {
+    if (!folderName) return setStatusVoice('Не понял, из какой папки удалить.', false);
+    const ordered = [...data.notes]
+      .filter(note => note.folder === folderName)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const target = ordered[(Number(displayIndex) || 0) - 1];
+    if (!target) return setStatusVoice(`В папке ${folderName} нет записи с номером ${displayIndex}.`, false);
+    deleteNoteNow(target);
+  }
+
   function clearNotebookNow() {
     if (!data.notes.length) return setStatusVoice('Блокнот уже пуст.', false);
     setData(prev => ({ ...prev, notes: [] }));
@@ -1115,6 +1142,9 @@ export default function App() {
 
   function handleDelete(text) {
     const source = normalize(text);
+    const indexedFolder = findFolderByText(data.folders, text);
+    const indexedNumber = extractFolderListIndex(text);
+    if (indexedFolder && indexedNumber) return deleteFolderIndexedNote(indexedFolder.name, indexedNumber);
     if (includesAny(source, ['удали все', 'удалить все', 'удали всё', 'удалить всё', 'удали все с блокнота', 'удали всё с блокнота', 'очисти блокнот', 'очисти весь блокнот'])) return clearNotebookNow();
     if (includesAny(source, ['очисти корзину', 'удали корзину', 'удали все записи с корзины', 'удали всё с корзины'])) return setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false);
     if (includesAny(source, ['очисти папку', 'удали все в папке', 'удали всё в папке', 'удали все с папки', 'удали всё с папки'])) {
@@ -1172,6 +1202,7 @@ export default function App() {
     if (plan.action === 'delete_trash') { setStatusVoice('Корзины больше нет. Записи удаляются сразу из папок.', false); return true; }
     if (plan.action === 'clear_folder') { plan.folder ? clearFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
     if (plan.action === 'delete_folder') { plan.folder ? deleteFolderNow(plan.folder) : setStatusVoice('Не указана папка.', false); return true; }
+    if (plan.action === 'delete_folder_indexed_note') { deleteFolderIndexedNote(plan.folder, plan.index); return true; }
     if (plan.action === 'delete_note') {
       const found =
         plan.target === 'current' ? selectedNote
@@ -1179,6 +1210,19 @@ export default function App() {
             : plan.target === 'folder_latest' && plan.folder ? [...data.notes].filter(note => note.folder === plan.folder).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
               : searchNotes(data.notes, plan.query || originalText)[0];
       found ? deleteNoteNow(found) : setStatusVoice('Не нашёл запись для удаления.', false);
+      return true;
+    }
+    if (plan.action === 'copy_current') { selectedNote ? copyNote(selectedNote) : setStatusVoice('Сначала откройте запись.'); return true; }
+    if (plan.action === 'copy_folder_latest') {
+      const latestInFolder = [...data.notes]
+        .filter(note => note.folder === plan.folder)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      if (!latestInFolder) setStatusVoice(`В папке ${plan.folder || 'этой'} пока нет записей.`);
+      else {
+        openNote(latestInFolder);
+        copyNote(latestInFolder);
+        setSuggestedFolder(plan.folder);
+      }
       return true;
     }
     if (plan.action === 'share_current') { selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.'); return true; }
@@ -1265,6 +1309,20 @@ export default function App() {
     if (intent === 'open_folder') {
       const folderMatch = findFolderByText(data.folders, spoken);
       return folderMatch ? openFolder(folderMatch.name) : setStatusVoice('Не понял, какую папку открыть.', false);
+    }
+    if (intent === 'copy') {
+      const folderMatch = findFolderByText(data.folders, spoken);
+      if (folderMatch) {
+        const latestInFolder = [...data.notes]
+          .filter(note => note.folder === folderMatch.name)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
+        openNote(latestInFolder);
+        copyNote(latestInFolder);
+        setSuggestedFolder(folderMatch.name);
+        return;
+      }
+      return selectedNote ? copyNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
     }
     if (intent === 'share') return selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
     if (intent === 'read') {
@@ -1434,15 +1492,22 @@ export default function App() {
                 </div>
                 {expanded ? (
                   <div className="folder-notes">
-                    {folderNotes.length ? folderNotes.map(note => (
+                    {folderNotes.length ? folderNotes.map((note, folderIndex) => (
                       <div key={note.id} className="folder-note-wrap">
                         <div className={selectedId === note.id ? 'folder-note-row active' : 'folder-note-row'}>
+                          <button
+                            className="folder-note-copy-button"
+                            onClick={() => copyNote(note)}
+                            aria-label={`Скопировать запись ${note.title}`}
+                          >
+                            ⧉
+                          </button>
                           <button
                             className={selectedId === note.id ? 'folder-note-item active' : 'folder-note-item'}
                             onClick={() => openNote(note)}
                           >
                             <div className="folder-note-copy">
-                              <span className="folder-note-title">{note.title}</span>
+                              <span className="folder-note-title">{folderIndex + 1}. {note.title}</span>
                               {note.type === 'shopping_list' ? <small className="folder-note-preview">{(note.items || []).join(', ')}</small> : null}
                             </div>
                             <small>{formatDate(note.createdAt)}</small>
@@ -1453,6 +1518,13 @@ export default function App() {
                             aria-label={expandedNotes[note.id] ? `Свернуть запись ${note.title}` : `Развернуть запись ${note.title}`}
                           >
                             {expandedNotes[note.id] ? '−' : '+'}
+                          </button>
+                          <button
+                            className="folder-note-delete"
+                            onClick={() => deleteNoteNow(note)}
+                            aria-label={`Удалить запись ${note.title}`}
+                          >
+                            ×
                           </button>
                         </div>
                         {expandedNotes[note.id] ? (
