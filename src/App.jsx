@@ -905,7 +905,7 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
       return {
         id: uid('note'),
         type: 'appointment',
-        folder: 'Покупки',
+        folder,
         title: deriveShoppingListTitle(items, content),
         content: items.join(', '),
         items,
@@ -1113,7 +1113,13 @@ function shareText(note) {
   if (!note) return '';
   if (note.type === 'contact') return `${note.title}\nТелефон: ${note.phone || 'не указан'}`;
   if (note.type === 'shopping_list') return `${note.title}\n${(note.items || []).map((x, i) => `${i + 1}. ${x}`).join('\n')}`;
-  if (note.type === 'appointment') return `${note.title}\n${note.dateLabel || ''} ${note.time || ''}\n${note.content}`.trim();
+  if (note.type === 'appointment') {
+    const when = [note.dateLabel || '', note.time || ''].filter(Boolean).join(' ').trim();
+    if (normalize(note.title) === normalize(note.content) || !String(note.content || '').trim()) {
+      return [note.title, when].filter(Boolean).join('\n').trim();
+    }
+    return [note.title, when, note.content].filter(Boolean).join('\n').trim();
+  }
   if (normalize(note.title) === normalize(note.content)) return `${note.title}`.trim();
   return `${note.title}\n${note.content || ''}`.trim();
 }
@@ -1507,12 +1513,13 @@ export default function App() {
     const checkMissedNotifications = () => {
       const nowTs = Date.now();
       const graceWindowMs = 5 * 60 * 1000;
+      if (!reminderSettings.enabled) return;
       data.notes
         .filter(note => note.type === 'appointment' && note.eventAt)
         .forEach(note => {
           const eventAt = new Date(note.eventAt);
           if (Number.isNaN(eventAt.getTime())) return;
-          const reminderPoints = [];
+          const reminderPoints = [{ at: eventAt, label: 'event' }];
           const firstEnabled = note.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true;
           if (firstEnabled) {
             const morningAt = new Date(eventAt);
@@ -1545,6 +1552,7 @@ export default function App() {
         const eventAt = new Date(note.eventAt);
         if (Number.isNaN(eventAt.getTime())) return;
         if (reminderSettings.enabled && Notification.permission === 'granted') {
+          scheduleNotification(note, eventAt, 'event');
           const firstEnabled = note.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true;
           if (firstEnabled) {
             const morningAt = new Date(eventAt);
@@ -1567,9 +1575,11 @@ export default function App() {
     window.addEventListener('focus', handleResume);
     window.addEventListener('pageshow', handleResume);
     document.addEventListener('visibilitychange', handleResume);
+    const intervalId = window.setInterval(checkMissedNotifications, 30000);
 
     return () => {
       timeouts.forEach(id => window.clearTimeout(id));
+      window.clearInterval(intervalId);
       window.removeEventListener('focus', handleResume);
       window.removeEventListener('pageshow', handleResume);
       document.removeEventListener('visibilitychange', handleResume);
