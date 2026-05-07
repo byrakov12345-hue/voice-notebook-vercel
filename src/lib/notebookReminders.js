@@ -28,3 +28,46 @@ export function buildReminderPoints(note, reminderSettings = {}) {
 export function isNotificationSupported() {
   return typeof window !== 'undefined' && 'Notification' in window;
 }
+
+export function buildReminderSummary(reminderPlan, toLabel) {
+  return reminderPlan.secondEnabled
+    ? `${reminderPlan.firstEnabled ? toLabel(reminderPlan.morningTime) : '1-е выкл.'} и ${toLabel(reminderPlan.secondTime)}`
+    : (reminderPlan.firstEnabled ? toLabel(reminderPlan.morningTime) : 'оба напоминания выключены');
+}
+
+export function buildAppointmentNote({
+  uid,
+  selectedDate,
+  folder,
+  title,
+  content,
+  dateLabel,
+  time,
+  appointmentMeta,
+  reminderFirstEnabled,
+  reminderMorningTime,
+  reminderSecondEnabled,
+  reminderSecondTime
+}) {
+  const now = new Date().toISOString();
+  return {
+    id: uid('note'),
+    type: 'appointment',
+    folder,
+    title,
+    content,
+    dateLabel,
+    time,
+    eventAt: selectedDate.toISOString(),
+    reminderFirstEnabled,
+    reminderMorningTime,
+    reminderSecondTime: reminderSecondEnabled ? reminderSecondTime : '',
+    reminderSecondEnabled,
+    actionLabel: appointmentMeta.action || '',
+    placeLabel: appointmentMeta.place || '',
+    codeLabel: appointmentMeta.code || '',
+    tags: ['встреча', dateLabel, time].filter(Boolean),
+    createdAt: now,
+    updatedAt: now
+  };
+}
