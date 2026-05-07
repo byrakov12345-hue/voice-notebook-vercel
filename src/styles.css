@@ -33,9 +33,19 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .reminder-grid select, .reminder-grid input { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 10px 12px; }
 .reminder-inline { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 6px; align-items: center; }
 .calendar-panel { margin-top: 14px; }
+.calendar-compose { display: grid; gap: 10px; margin-bottom: 14px; }
+.calendar-selected { color: #cbd5e1; font-size: 14px; }
+.calendar-compose-row { display: grid; grid-template-columns: 120px minmax(0,1fr) 140px; gap: 8px; }
+.calendar-compose-row input { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 10px 12px; }
 .calendar-list { display: grid; gap: 12px; max-height: 52vh; overflow: auto; }
 .calendar-month { border-radius: 18px; padding: 12px; background: rgba(255,255,255,0.05); display: grid; gap: 8px; }
 .calendar-month h3 { margin: 0; font-size: 18px; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 6px; }
+.calendar-weekday { text-align: center; color: #94a3b8; font-size: 12px; padding: 4px 0; }
+.calendar-day { min-height: 38px; border-radius: 12px; background: rgba(15,23,42,0.58); }
+.calendar-day.empty { visibility: hidden; pointer-events: none; }
+.calendar-day.has-items { outline: 1px solid rgba(56,189,248,0.55); }
+.calendar-day.active { background: #f8fafc; color: #020617; font-weight: 800; }
 .calendar-item { width: 100%; text-align: left; display: grid; gap: 4px; border-radius: 14px; background: rgba(15,23,42,0.58); }
 .calendar-item strong { font-size: 15px; }
 .calendar-item span { color: #94a3b8; font-size: 13px; }
@@ -122,4 +132,5 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
   .notes-head { flex-direction: column; align-items: stretch; }
   .note-list { max-height: none; }
   .reminder-grid { grid-template-columns: 1fr; }
+  .calendar-compose-row { grid-template-columns: 1fr; }
 }

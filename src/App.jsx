@@ -370,9 +370,16 @@ function buildCalendarMonths(notes) {
     return {
       key: `${monthDate.getFullYear()}-${monthDate.getMonth()}`,
       title: new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(monthDate),
+      monthDate,
+      daysInMonth: monthEnd.getDate(),
+      firstWeekday: (new Date(monthDate.getFullYear(), monthDate.getMonth(), 1).getDay() + 6) % 7,
       items
     };
   });
+}
+
+function formatCalendarDateLabel(date) {
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
 
 function cleanTitle(text, fallback = 'Заметка') {
@@ -1052,16 +1059,18 @@ export default function App() {
   const [selectedVoiceStyle, setSelectedVoiceStyle] = useState('default');
   const [historyFilter, setHistoryFilter] = useState('all');
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState('');
+  const [calendarNoteText, setCalendarNoteText] = useState('');
+  const [calendarNoteTime, setCalendarNoteTime] = useState('09:00');
   const [reminderSettings, setReminderSettings] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || '{}');
       return {
         morningTime: String(saved?.morningTime || '09:00'),
-        secondReminderHours: Number(saved?.secondReminderHours ?? 0),
-        secondReminderMinutes: Number(saved?.secondReminderMinutes ?? 30)
+        secondReminderTime: String(saved?.secondReminderTime || '17:30')
       };
     } catch {
-      return { morningTime: '09:00', secondReminderHours: 0, secondReminderMinutes: 30 };
+      return { morningTime: '09:00', secondReminderTime: '17:30' };
     }
   });
   const useAI = true;
@@ -1150,8 +1159,9 @@ export default function App() {
         const morningAt = new Date(eventAt);
         const [morningHour, morningMinute] = String(reminderSettings.morningTime || '09:00').split(':').map(Number);
         morningAt.setHours(morningHour || 0, morningMinute || 0, 0, 0);
-        const secondLeadMinutes = (Number(reminderSettings.secondReminderHours || 0) * 60) + Number(reminderSettings.secondReminderMinutes || 0);
-        const secondAt = new Date(eventAt.getTime() - secondLeadMinutes * 60000);
+        const secondAt = new Date(eventAt);
+        const [secondHour, secondMinute] = String(reminderSettings.secondReminderTime || '17:30').split(':').map(Number);
+        secondAt.setHours(secondHour || 0, secondMinute || 0, 0, 0);
         if (Notification.permission === 'granted') {
           scheduleNotification(note, morningAt, 'morning');
           scheduleNotification(note, secondAt, 'before');
@@ -1442,6 +1452,43 @@ export default function App() {
     setSelectedId(null);
     const labels = { today: 'сегодня', yesterday: 'вчера', week: 'за неделю', all: 'все записи' };
     setStatusVoice(`Показываю записи ${labels[period] || 'за период'}.`, false);
+  }
+
+  function selectCalendarDate(date) {
+    if (!date) return;
+    const iso = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0).toISOString();
+    setCalendarSelectedDate(iso);
+    setStatusVoice(`Выбрана дата ${formatCalendarDateLabel(date)}.`, false);
+  }
+
+  function saveCalendarNote() {
+    if (!calendarSelectedDate) return setStatusVoice('Сначала выберите дату в календаре.', false);
+    const content = String(calendarNoteText || '').trim();
+    if (!content) return setStatusVoice('Введите заметку для выбранной даты.', false);
+    const selectedDate = new Date(calendarSelectedDate);
+    const [hour, minute] = String(calendarNoteTime || '09:00').split(':').map(Number);
+    selectedDate.setHours(hour || 0, minute || 0, 0, 0);
+    const type = inferType(content);
+    const folder = resolveFolderName(content, type === 'note' ? 'appointment' : type);
+    const appointmentMeta = extractAppointmentMeta(content);
+    const note = {
+      id: uid('note'),
+      type: 'appointment',
+      folder,
+      title: cleanTitle(content, 'Напоминание'),
+      content,
+      dateLabel: formatCalendarDateLabel(selectedDate),
+      time: String(calendarNoteTime || '09:00'),
+      eventAt: selectedDate.toISOString(),
+      actionLabel: appointmentMeta.action || '',
+      placeLabel: appointmentMeta.place || '',
+      codeLabel: appointmentMeta.code || '',
+      tags: ['встреча', formatCalendarDateLabel(selectedDate), String(calendarNoteTime || '09:00')],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    saveNote(note, true);
+    setCalendarNoteText('');
   }
 
   async function enableNotifications() {
@@ -1806,13 +1853,8 @@ export default function App() {
               <input type="time" value={reminderSettings.morningTime} onChange={e => setReminderSettings(prev => ({ ...prev, morningTime: e.target.value || '09:00' }))} />
             </label>
             <label>
-              <span>Второе напоминание заранее</span>
-              <div className="reminder-inline">
-                <input type="number" min="0" max="23" value={reminderSettings.secondReminderHours} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderHours: Math.max(0, Math.min(23, Number(e.target.value) || 0)) }))} />
-                <small>ч</small>
-                <input type="number" min="0" max="59" value={reminderSettings.secondReminderMinutes} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderMinutes: Math.max(0, Math.min(59, Number(e.target.value) || 0)) }))} />
-                <small>мин</small>
-              </div>
+              <span>Второе напоминание</span>
+              <input type="time" value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '17:30' }))} />
             </label>
           </div>
         </section>
@@ -1824,10 +1866,39 @@ export default function App() {
             <strong>Календарь на 5 лет</strong>
             <button onClick={() => setCalendarOpen(false)}>Закрыть</button>
           </div>
+          <div className="calendar-compose">
+            <div className="calendar-selected">
+              {calendarSelectedDate ? `Выбрано: ${formatCalendarDateLabel(new Date(calendarSelectedDate))}` : 'Выберите число'}
+            </div>
+            <div className="calendar-compose-row">
+              <input type="time" value={calendarNoteTime} onChange={e => setCalendarNoteTime(e.target.value || '09:00')} />
+              <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на эту дату" />
+              <button className="primary" onClick={saveCalendarNote}>Сохранить</button>
+            </div>
+          </div>
           <div className="calendar-list">
             {calendarMonths.map(month => (
               <div key={month.key} className="calendar-month">
                 <h3>{capitalize(month.title)}</h3>
+                <div className="calendar-grid">
+                  {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => <div key={`${month.key}_${day}`} className="calendar-weekday">{day}</div>)}
+                  {Array.from({ length: month.firstWeekday }).map((_, idx) => <div key={`${month.key}_empty_${idx}`} className="calendar-day empty" />)}
+                  {Array.from({ length: month.daysInMonth }, (_, dayIndex) => {
+                    const dayDate = new Date(month.monthDate.getFullYear(), month.monthDate.getMonth(), dayIndex + 1, 12, 0, 0, 0);
+                    const dayIso = dayDate.toISOString();
+                    const hasItems = month.items.some(note => String(note.eventAt || '').slice(0, 10) === dayIso.slice(0, 10));
+                    const isSelected = calendarSelectedDate && String(calendarSelectedDate).slice(0, 10) === dayIso.slice(0, 10);
+                    return (
+                      <button
+                        key={`${month.key}_${dayIndex + 1}`}
+                        className={`calendar-day${hasItems ? ' has-items' : ''}${isSelected ? ' active' : ''}`}
+                        onClick={() => selectCalendarDate(dayDate)}
+                      >
+                        {dayIndex + 1}
+                      </button>
+                    );
+                  })}
+                </div>
                 {month.items.length ? month.items.map(note => (
                   <button key={note.id} className="calendar-item" onClick={() => openNote(note)}>
                     <strong>{note.title}</strong>
