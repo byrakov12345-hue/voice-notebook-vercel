@@ -43,7 +43,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .calendar-compose { display: grid; gap: 10px; margin-bottom: 14px; }
 .calendar-selected { color: #cbd5e1; font-size: 14px; }
 .calendar-compose-row { display: grid; grid-template-columns: 120px minmax(0,1fr) 140px; gap: 8px; }
+.calendar-compose-main { grid-template-columns: minmax(0,1fr) 140px; }
 .calendar-compose-row input { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 10px 12px; }
+.calendar-compose-row select { color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 10px 12px; }
 .calendar-reminder-label { display: flex; align-items: center; color: #94a3b8; font-size: 13px; }
 .calendar-list {
   display: grid;

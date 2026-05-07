@@ -1590,6 +1590,18 @@ export default function App() {
   }, [data.notes, selectedFolder, query, historyFilter, quickDateFilter]);
   const calendarMonths = useMemo(() => buildCalendarMonths(data.notes), [data.notes]);
   const quickDateStrip = useMemo(() => buildQuickDateStrip(), []);
+  const calendarDayPicker = useMemo(() => {
+    const baseDate = calendarSelectedDate ? new Date(calendarSelectedDate) : new Date();
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    return {
+      year,
+      month,
+      selectedDay: baseDate.getDate(),
+      options: Array.from({ length: daysInMonth }, (_, index) => index + 1)
+    };
+  }, [calendarSelectedDate]);
   const selectedNoteIndex = useMemo(
     () => visibleNotes.findIndex(note => note.id === selectedId),
     [visibleNotes, selectedId]
@@ -1911,6 +1923,13 @@ export default function App() {
       setCalendarNoteText('');
     }
     setStatusVoice(`Выбрана дата ${formatCalendarDateLabel(date)}.`, false);
+  }
+
+  function selectCalendarDayFromPicker(dayValue) {
+    const day = Number(dayValue);
+    if (!day) return;
+    const date = new Date(calendarDayPicker.year, calendarDayPicker.month, day, 12, 0, 0, 0);
+    selectCalendarDate(date, { clearContext: true });
   }
 
   function notesForCalendarDate(dateIso) {
@@ -2755,7 +2774,15 @@ export default function App() {
               {calendarSelectedDate ? `Выбрано: ${formatCalendarDateLabel(new Date(calendarSelectedDate))}` : 'Выберите число'}
             </div>
             <div className="calendar-compose-row">
+              <select value={calendarDayPicker.selectedDay} onChange={e => selectCalendarDayFromPicker(e.target.value)}>
+                {calendarDayPicker.options.map(day => (
+                  <option key={day} value={day}>{day}</option>
+                ))}
+              </select>
               <input type="time" value={calendarNoteTime} onChange={e => setCalendarNoteTime(e.target.value || '09:00')} />
+              <div className="calendar-reminder-label">Число и время</div>
+            </div>
+            <div className="calendar-compose-row calendar-compose-main">
               <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на эту дату" />
               <button className="primary" onClick={saveCalendarNote}>Сохранить</button>
             </div>
@@ -2952,7 +2979,6 @@ export default function App() {
             <div><h2>{selectedFolder}</h2><p>{visibleNotes.length} записей</p></div>
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Поиск по заметкам" />
           </div>
-          {selectedNote ? <div className="selected-inline"><NoteCard note={selectedNote} displayIndex={selectedNoteIndex >= 0 ? selectedNoteIndex + 1 : null} selected onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} /></div> : null}
           <div className="note-list">
             {visibleNotes.length ? visibleNotes.map((note, index) => <NoteCard key={note.id} note={note} displayIndex={index + 1} selected={selectedId === note.id} onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} />) : <div className="empty">Записей пока нет. Скажите или напишите команду.</div>}
           </div>
