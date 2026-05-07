@@ -273,6 +273,10 @@ function extractAppointmentDateLabel(text) {
   if (source.includes('послезавтра')) return 'послезавтра';
   if (source.includes('завтра')) return 'завтра';
   if (source.includes('сегодня')) return 'сегодня';
+  const sameMonthMatch = source.match(/\b(\d{1,2})\s+число(?:\s+этого\s+месяца)?\b/i);
+  if (sameMonthMatch) return `${sameMonthMatch[1]} число`;
+  const monthMatch = source.match(/\b(\d{1,2})\s+(?:число\s+)?(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i);
+  if (monthMatch) return `${monthMatch[1]} ${monthMatch[2]}`;
   const weekdays = ['понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу', 'воскресенье'];
   return weekdays.find(day => source.includes(day)) || '';
 }
@@ -296,12 +300,29 @@ function parseAppointmentDateTime(text) {
       if (probe.getTime() < now.getTime() - 86400000) year += 1;
       eventDate = new Date(year, months[monthKey], day, 12, 0, 0, 0);
     }
-  } else if (source.includes('послезавтра')) {
-    eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2, 12, 0, 0, 0);
-  } else if (source.includes('завтра')) {
-    eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12, 0, 0, 0);
-  } else if (source.includes('сегодня')) {
-    eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  } else {
+    const sameMonthMatch = source.match(/\b(\d{1,2})\s+число(?:\s+этого\s+месяца)?\b/i);
+    if (sameMonthMatch) {
+      const day = Number(sameMonthMatch[1]);
+      if (day) {
+        let year = now.getFullYear();
+        let month = now.getMonth();
+        const probe = new Date(year, month, day, 12, 0, 0, 0);
+        if (probe.getTime() < now.getTime() - 86400000) {
+          const nextMonth = new Date(year, month + 1, day, 12, 0, 0, 0);
+          year = nextMonth.getFullYear();
+          month = nextMonth.getMonth();
+        }
+        eventDate = new Date(year, month, day, 12, 0, 0, 0);
+      }
+    }
+    else if (source.includes('послезавтра')) {
+      eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2, 12, 0, 0, 0);
+    } else if (source.includes('завтра')) {
+      eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12, 0, 0, 0);
+    } else if (source.includes('сегодня')) {
+      eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+    }
   }
 
   const time = extractAppointmentTime(text);
@@ -380,6 +401,88 @@ function buildCalendarMonths(notes) {
 
 function formatCalendarDateLabel(date) {
   return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+}
+
+function extractAllTimes(text) {
+  const source = normalize(text);
+  const times = [];
+  const clockMatches = [...source.matchAll(/\b(\d{1,2})[:.](\d{2})\b/g)];
+  clockMatches.forEach(match => {
+    times.push(`${String(match[1]).padStart(2, '0')}:${match[2]}`);
+  });
+  const tokens = source.split(' ');
+  for (let i = 0; i < tokens.length; i += 1) {
+    const n = Number(tokens[i]);
+    if (Number.isNaN(n)) continue;
+    const next = tokens[i + 1];
+    if (next === 'вечера' || next === 'ночи') {
+      const hour = next === 'вечера' && n < 12 ? n + 12 : n;
+      times.push(`${String(hour).padStart(2, '0')}:00`);
+    } else if (next === 'утра') {
+      times.push(`${String(n).padStart(2, '0')}:00`);
+    } else if (next === 'дня') {
+      times.push(`${String(n === 12 ? 12 : n + 12).padStart(2, '0')}:00`);
+    }
+  }
+  return [...new Set(times)];
+}
+
+function parseCalendarTargetDate(text) {
+  const source = normalize(text);
+  const now = new Date();
+  const months = {
+    январ: 0, феврал: 1, март: 2, апрел: 3, май: 4, июн: 5,
+    июл: 6, август: 7, сентябр: 8, октябр: 9, ноябр: 10, декабр: 11
+  };
+  let day = null;
+  let month = null;
+  let year = now.getFullYear();
+
+  const sameMonthMatch = source.match(/\b(\d{1,2})\s+число\s+этого\s+месяца\b/i);
+  if (sameMonthMatch) {
+    day = Number(sameMonthMatch[1]);
+    month = now.getMonth();
+  }
+
+  if (day === null) {
+    const monthMatch = source.match(/\b(\d{1,2})\s+(?:число\s+)?(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i);
+    if (monthMatch) {
+      day = Number(monthMatch[1]);
+      const monthKey = Object.keys(months).find(key => monthMatch[2].startsWith(key));
+      if (monthKey) month = months[monthKey];
+    }
+  }
+
+  if (day === null) {
+    const simpleThisMonth = source.match(/\b(\d{1,2})\s+число\b/i);
+    if (simpleThisMonth) {
+      day = Number(simpleThisMonth[1]);
+      month = now.getMonth();
+    }
+  }
+
+  if (day === null || month === null) return null;
+  const candidate = new Date(year, month, day, 12, 0, 0, 0);
+  if (candidate.getTime() < now.getTime() - 86400000) {
+    year += 1;
+  }
+  return new Date(year, month, day, 12, 0, 0, 0);
+}
+
+function stripCalendarVoiceContent(text) {
+  return String(text || '')
+    .replace(/^(открой|отметь|запиши|запомни|сохрани)\s+/i, '')
+    .replace(/\b\d{1,2}\s+число\s+этого\s+месяца\b/i, '')
+    .replace(/\b\d{1,2}\s+(?:число\s+)?(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i, '')
+    .replace(/\bоставь\s+напоминание\b/i, '')
+    .replace(/\bсделай\s+уведомление\b/i, '')
+    .replace(/\bустанови\s+уведомление\b/i, '')
+    .replace(/\bна\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
+    .replace(/\bи\s+на\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
+    .replace(/^и\s+/i, '')
+    .replace(/^что\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function cleanTitle(text, fallback = 'Заметка') {
@@ -1158,10 +1261,10 @@ export default function App() {
         const eventAt = new Date(note.eventAt);
         if (Number.isNaN(eventAt.getTime())) return;
         const morningAt = new Date(eventAt);
-        const [morningHour, morningMinute] = String(reminderSettings.morningTime || '09:00').split(':').map(Number);
+        const [morningHour, morningMinute] = String(note.reminderMorningTime || reminderSettings.morningTime || '09:00').split(':').map(Number);
         morningAt.setHours(morningHour || 0, morningMinute || 0, 0, 0);
         const secondAt = new Date(eventAt);
-        const [secondHour, secondMinute] = String(reminderSettings.secondReminderTime || '17:30').split(':').map(Number);
+        const [secondHour, secondMinute] = String(note.reminderSecondTime || reminderSettings.secondReminderTime || '17:30').split(':').map(Number);
         secondAt.setHours(secondHour || 0, secondMinute || 0, 0, 0);
         if (reminderSettings.enabled && Notification.permission === 'granted') {
           scheduleNotification(note, morningAt, 'morning');
@@ -1492,6 +1595,56 @@ export default function App() {
     setCalendarNoteText('');
   }
 
+  function handleCalendarVoiceCommand(text) {
+    const targetDate = parseCalendarTargetDate(text);
+    if (!targetDate) return false;
+    setCalendarOpen(true);
+    setSettingsOpen(false);
+    selectCalendarDate(targetDate);
+
+    const source = normalize(text);
+    const wantsSave = includesAny(source, ['запиши', 'запомни', 'сохрани', 'оставь напоминание', 'установи уведомление', 'сделай уведомление']);
+    if (!wantsSave) return true;
+
+    const content = stripCalendarVoiceContent(text);
+    if (!content) return true;
+
+    const allTimes = extractAllTimes(text);
+    const noteTime = allTimes[0] || calendarNoteTime || '09:00';
+    const reminderOne = allTimes[0] || reminderSettings.morningTime || '09:00';
+    const reminderTwo = allTimes[1] || reminderSettings.secondReminderTime || '17:30';
+
+    const selectedDate = new Date(targetDate);
+    const [hour, minute] = String(noteTime).split(':').map(Number);
+    selectedDate.setHours(hour || 0, minute || 0, 0, 0);
+    const appointmentMeta = extractAppointmentMeta(content);
+    const folder = resolveFolderName(content, 'appointment');
+    const note = {
+      id: uid('note'),
+      type: 'appointment',
+      folder,
+      title: cleanTitle(content, 'Напоминание'),
+      content,
+      dateLabel: formatCalendarDateLabel(selectedDate),
+      time: noteTime,
+      eventAt: selectedDate.toISOString(),
+      reminderMorningTime: reminderOne,
+      reminderSecondTime: reminderTwo,
+      actionLabel: appointmentMeta.action || '',
+      placeLabel: appointmentMeta.place || '',
+      codeLabel: appointmentMeta.code || '',
+      tags: ['встреча', formatCalendarDateLabel(selectedDate), noteTime],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setCalendarSelectedDate(new Date(targetDate).toISOString());
+    setCalendarNoteTime(noteTime);
+    setCalendarNoteText('');
+    saveNote(note, true);
+    setStatusVoice(`Сохранено на ${formatCalendarDateLabel(selectedDate)}. Напоминания: ${reminderOne} и ${reminderTwo}.`, false);
+    return true;
+  }
+
   async function enableNotifications() {
     if (typeof window === 'undefined' || !('Notification' in window)) {
       setStatusVoice('Этот браузер не поддерживает уведомления.', false);
@@ -1699,6 +1852,10 @@ export default function App() {
       setSelectedId(null);
       setSuggestedFolder('');
       return setStatusVoice(`Папка ${folderName} создана или уже существует.`);
+    }
+
+    if ((source.includes('число') || /\b\d{1,2}\s+(январ|феврал|март|апрел|мая|май|июн|июл|август|сентябр|октябр|ноябр|декабр)/i.test(source)) && startsWithAny(source, ['открой', 'запиши', 'запомни', 'сохрани', 'оставь', 'сделай', 'установи'])) {
+      if (handleCalendarVoiceCommand(spoken)) return;
     }
 
     if (useAI) {
