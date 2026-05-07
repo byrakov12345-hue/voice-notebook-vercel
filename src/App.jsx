@@ -67,6 +67,17 @@ const DEDUPE_STOP_WORDS = new Set([
   'сохрани', 'запомни', 'запиши', 'добавь', 'сегодня', 'завтра', 'весь', 'вся', 'все', 'всё'
 ]);
 
+const SEARCH_SYNONYMS = {
+  мастер: ['гараж', 'парикмахер', 'барбер', 'мастер'],
+  машина: ['авто', 'гараж', 'масло', 'бензин', 'шины', 'машина'],
+  аптека: ['лекарство', 'таблетки', 'здоровье', 'витамин', 'аптека'],
+  работа: ['проект', 'клиент', 'заказ', 'дедлайн', 'работа'],
+  купить: ['покупки', 'магазин', 'продукты', 'купить'],
+  телефон: ['номер', 'контакт', 'телефон'],
+  стрижка: ['барбер', 'парикмахер', 'стрижка'],
+  приложение: ['проект', 'идея', 'приложение']
+};
+
 const digitWords = {
   ноль: '0', один: '1', одна: '1', два: '2', две: '2', три: '3', четыре: '4',
   пять: '5', шесть: '6', семь: '7', восемь: '8', девять: '9'
@@ -427,6 +438,80 @@ function extractAllTimes(text) {
   return [...new Set(times)];
 }
 
+function timeToLabel(time) {
+  if (!time) return '';
+  const [hourRaw, minuteRaw] = String(time).split(':');
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return String(time);
+  let suffix = 'утра';
+  let displayHour = hour;
+  if (hour >= 18) suffix = 'вечера';
+  else if (hour >= 12) suffix = 'дня';
+  else if (hour < 5) suffix = 'ночи';
+  if (displayHour === 0) displayHour = 12;
+  if (displayHour > 12) displayHour -= 12;
+  return minute ? `${displayHour}:${String(minute).padStart(2, '0')} ${suffix}` : `${displayHour} ${suffix}`;
+}
+
+function parseReminderVoiceSettings(text, defaults = {}) {
+  const source = normalize(text);
+  const allTimes = extractAllTimes(text);
+  const defaultsResolved = {
+    noteTime: defaults.noteTime || '',
+    morningTime: defaults.morningTime || '09:00',
+    secondTime: defaults.secondTime || '',
+    secondEnabled: Boolean(defaults.secondEnabled)
+  };
+  const result = { ...defaultsResolved };
+
+  const secondOnly = source.match(/(?:второе|2-е|второй)\s+напоминани[ея]\s+на\s+(.+)$/i);
+  if (secondOnly) {
+    const secondTimes = extractAllTimes(secondOnly[1]);
+    if (secondTimes[0]) {
+      result.secondTime = secondTimes[0];
+      result.secondEnabled = true;
+    }
+    return result;
+  }
+
+  const firstOnly = source.match(/(?:первое|1-е|утренн\w+)\s+напоминани[ея]\s+на\s+(.+)$/i);
+  if (firstOnly) {
+    const firstTimes = extractAllTimes(firstOnly[1]);
+    if (firstTimes[0]) result.morningTime = firstTimes[0];
+    return result;
+  }
+
+  if (includesAny(source, ['без второго напоминания', 'убери второе напоминание', 'отключи второе напоминание'])) {
+    result.secondEnabled = false;
+    result.secondTime = '';
+    return result;
+  }
+
+  if (allTimes.length >= 3) {
+    result.noteTime = allTimes[0];
+    result.morningTime = allTimes[1];
+    result.secondTime = allTimes[2];
+    result.secondEnabled = true;
+    return result;
+  }
+
+  if (allTimes.length === 2) {
+    result.morningTime = allTimes[0];
+    result.secondTime = allTimes[1];
+    result.secondEnabled = true;
+    return result;
+  }
+
+  if (allTimes.length === 1 && includesAny(source, ['напоминан', 'уведомлен'])) {
+    result.morningTime = allTimes[0];
+    result.secondEnabled = false;
+    result.secondTime = '';
+  }
+
+  return result;
+}
+
 function parseCalendarTargetDate(text) {
   const source = normalize(text);
   const now = new Date();
@@ -477,8 +562,10 @@ function stripCalendarVoiceContent(text) {
     .replace(/\bоставь\s+напоминание\b/i, '')
     .replace(/\bсделай\s+уведомление\b/i, '')
     .replace(/\bустанови\s+уведомление\b/i, '')
-    .replace(/\bна\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
-    .replace(/\bи\s+на\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
+    .replace(/\b(?:в|на)\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
+    .replace(/\bи\s+(?:в|на)\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
+    .replace(/\b(?:первое|1-е|утренн\w+|второе|2-е|второй)\s+напоминани[ея]\s+на\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\b/gi, '')
+    .replace(/\b(?:и\s+)?(?:первое|1-е|утренн\w+|второе|2-е|второй)\s+напоминани[ея]\b/gi, '')
     .replace(/^и\s+/i, '')
     .replace(/^что\s+/i, '')
     .replace(/\s+/g, ' ')
@@ -730,7 +817,7 @@ function extractContact(text) {
   return { name, description, phone };
 }
 
-function createNoteFromLocalText(text, preferredFolder = '') {
+function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = {}) {
   const now = new Date().toISOString();
   const type = inferType(text);
   const folder = resolveSaveFolder(text, type, preferredFolder);
@@ -772,6 +859,9 @@ function createNoteFromLocalText(text, preferredFolder = '') {
     return {
       id: uid('note'), type, folder, title, content,
       dateLabel: eventMeta.dateLabel, time: eventMeta.time, eventAt: eventMeta.eventAt,
+      reminderMorningTime: reminderDefaults.morningTime || '09:00',
+      reminderSecondTime: reminderDefaults.secondEnabled ? (reminderDefaults.secondTime || '17:30') : '',
+      reminderSecondEnabled: Boolean(reminderDefaults.secondEnabled),
       actionLabel: appointmentMeta.action, placeLabel: appointmentMeta.place, codeLabel: appointmentMeta.code,
       tags: ['встреча', eventMeta.dateLabel, eventMeta.time, appointmentMeta.place, appointmentMeta.code, ...tags].filter(Boolean), createdAt: now, updatedAt: now
     };
@@ -783,8 +873,8 @@ function createNoteFromLocalText(text, preferredFolder = '') {
   };
 }
 
-function createNoteFromAI(plan, fallbackText, preferredFolder = '') {
-  if (!plan || typeof plan !== 'object') return createNoteFromLocalText(fallbackText, preferredFolder);
+function createNoteFromAI(plan, fallbackText, preferredFolder = '', reminderDefaults = {}) {
+  if (!plan || typeof plan !== 'object') return createNoteFromLocalText(fallbackText, preferredFolder, reminderDefaults);
   const now = new Date().toISOString();
   const actionMap = {
     save_idea: 'idea', save_task: 'task', save_appointment: 'appointment', save_shopping_list: 'shopping_list',
@@ -820,6 +910,9 @@ function createNoteFromAI(plan, fallbackText, preferredFolder = '') {
       dateLabel: plan.dateLabel || eventMeta.dateLabel,
       time: plan.time || eventMeta.time,
       eventAt: plan.eventAt || eventMeta.eventAt,
+      reminderMorningTime: plan.reminderMorningTime || reminderDefaults.morningTime || '09:00',
+      reminderSecondTime: (plan.reminderSecondEnabled ?? reminderDefaults.secondEnabled) ? (plan.reminderSecondTime || reminderDefaults.secondTime || '17:30') : '',
+      reminderSecondEnabled: Boolean(plan.reminderSecondEnabled ?? reminderDefaults.secondEnabled),
       actionLabel: plan.actionLabel || appointmentMeta.action,
       placeLabel: plan.placeLabel || appointmentMeta.place,
       codeLabel: plan.codeLabel || appointmentMeta.code,
@@ -863,14 +956,15 @@ function searchNotes(notes, query) {
     .replace(/\b(заметку|запись|номер|телефон|контакт|идею|задачу|про|мне)\b/g, '')
     .trim();
   const terms = q.split(' ').filter(t => t.length > 1);
-  if (!terms.length) return [...notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const expandedTerms = [...new Set(terms.flatMap(term => [term, ...(SEARCH_SYNONYMS[term] || [])]))];
+  if (!expandedTerms.length) return [...notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   return notes
     .map(note => {
       const haystack = normalize([
         note.title, note.content, note.folder, note.name, note.description, note.phone,
         ...(note.tags || []), ...(note.items || [])
       ].join(' '));
-      const score = terms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
+      const score = expandedTerms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
       return { note, score };
     })
     .filter(x => x.score > 0)
@@ -1177,16 +1271,18 @@ export default function App() {
   const [calendarNoteTime, setCalendarNoteTime] = useState('09:00');
   const [calendarReminderMorningTime, setCalendarReminderMorningTime] = useState('09:00');
   const [calendarReminderSecondTime, setCalendarReminderSecondTime] = useState('17:30');
+  const [calendarSecondReminderEnabled, setCalendarSecondReminderEnabled] = useState(true);
   const [reminderSettings, setReminderSettings] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || '{}');
       return {
         enabled: Boolean(saved?.enabled ?? false),
         morningTime: String(saved?.morningTime || '09:00'),
-        secondReminderTime: String(saved?.secondReminderTime || '17:30')
+        secondReminderTime: String(saved?.secondReminderTime || '17:30'),
+        secondReminderEnabled: Boolean(saved?.secondReminderEnabled ?? true)
       };
     } catch {
-      return { enabled: false, morningTime: '09:00', secondReminderTime: '17:30' };
+      return { enabled: false, morningTime: '09:00', secondReminderTime: '17:30', secondReminderEnabled: true };
     }
   });
   const useAI = true;
@@ -1252,7 +1348,16 @@ export default function App() {
   useEffect(() => {
     setCalendarReminderMorningTime(reminderSettings.morningTime || '09:00');
     setCalendarReminderSecondTime(reminderSettings.secondReminderTime || '17:30');
-  }, [reminderSettings.morningTime, reminderSettings.secondReminderTime]);
+    setCalendarSecondReminderEnabled(Boolean(reminderSettings.secondReminderEnabled ?? true));
+  }, [reminderSettings.morningTime, reminderSettings.secondReminderTime, reminderSettings.secondReminderEnabled]);
+
+  useEffect(() => {
+    if (settingsOpen) setCalendarOpen(false);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (calendarOpen) setSettingsOpen(false);
+  }, [calendarOpen]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) return undefined;
@@ -1282,12 +1387,16 @@ export default function App() {
         const morningAt = new Date(eventAt);
         const [morningHour, morningMinute] = String(note.reminderMorningTime || reminderSettings.morningTime || '09:00').split(':').map(Number);
         morningAt.setHours(morningHour || 0, morningMinute || 0, 0, 0);
-        const secondAt = new Date(eventAt);
-        const [secondHour, secondMinute] = String(note.reminderSecondTime || reminderSettings.secondReminderTime || '17:30').split(':').map(Number);
-        secondAt.setHours(secondHour || 0, secondMinute || 0, 0, 0);
         if (reminderSettings.enabled && Notification.permission === 'granted') {
           scheduleNotification(note, morningAt, 'morning');
-          scheduleNotification(note, secondAt, 'before');
+          const secondEnabled = note.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true;
+          const secondValue = note.reminderSecondTime || reminderSettings.secondReminderTime || '';
+          if (secondEnabled && secondValue) {
+            const secondAt = new Date(eventAt);
+            const [secondHour, secondMinute] = String(secondValue).split(':').map(Number);
+            secondAt.setHours(secondHour || 0, secondMinute || 0, 0, 0);
+            scheduleNotification(note, secondAt, 'before');
+          }
         }
       });
 
@@ -1390,6 +1499,22 @@ export default function App() {
     deleteNoteNow(target);
   }
 
+  function applyCalendarReminderDefaults(note = null) {
+    setCalendarReminderMorningTime(note?.reminderMorningTime || reminderSettings.morningTime || '09:00');
+    setCalendarReminderSecondTime(note?.reminderSecondTime || reminderSettings.secondReminderTime || '17:30');
+    setCalendarSecondReminderEnabled(Boolean(note?.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true));
+  }
+
+  function loadNoteIntoCalendar(note) {
+    if (!note?.eventAt) return;
+    setCalendarSelectedDate(new Date(note.eventAt).toISOString());
+    setCalendarNoteText(note.content || '');
+    setCalendarNoteTime(note.time || '09:00');
+    applyCalendarReminderDefaults(note);
+    setCalendarOpen(true);
+    setSettingsOpen(false);
+  }
+
   function updateNoteById(noteId, updater) {
     let updatedNote = null;
     setData(prev => ({
@@ -1471,17 +1596,48 @@ export default function App() {
   }
 
   function saveNote(note, showAfterSave = false) {
+    const dedupeWindowMs = 20000;
+    const incomingSignature = noteSignature(note);
+    if (
+      lastSavedRef.current.signature === incomingSignature &&
+      Date.now() - lastSavedRef.current.at < dedupeWindowMs
+    ) {
+      setStatusVoice(`Повторная запись ${note.title} пропущена.`, false);
+      return false;
+    }
+
+    let duplicateDetected = false;
+    let duplicateNote = null;
     setData(prev => {
+      const nowTs = Date.now();
+      duplicateNote = prev.notes.find(existing => {
+        const createdAt = new Date(existing.createdAt || existing.updatedAt || nowTs).getTime();
+        return nowTs - createdAt < dedupeWindowMs && isSameOrNearDuplicate(existing, note);
+      });
+      if (duplicateNote) {
+        duplicateDetected = true;
+        return prev;
+      }
       return {
         ...prev,
         folders: ensureFolder(prev.folders, note.folder),
         notes: [note, ...prev.notes]
       };
     });
+    if (duplicateDetected) {
+      if (duplicateNote?.id) setSelectedId(duplicateNote.id);
+      setSelectedFolder(duplicateNote?.folder || note.folder);
+      setSuggestedFolder('');
+      lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
+      setStatusVoice(`Такая запись уже есть в папке ${duplicateNote?.folder || note.folder}.`, false);
+      return false;
+    }
+    lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
     setSuggestedFolder('');
     setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
+    return true;
   }
 
   function appendToLatestShoppingList(folderName, items, rawText = '') {
@@ -1519,6 +1675,7 @@ export default function App() {
   function openNote(note) {
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
+    if (note.type === 'appointment' && note.eventAt) loadNoteIntoCalendar(note);
     setStatusVoice(`Открыта запись: ${note.title}.`, false);
   }
 
@@ -1563,8 +1720,7 @@ export default function App() {
     if (!date) return;
     const iso = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0).toISOString();
     setCalendarSelectedDate(iso);
-    setCalendarReminderMorningTime(reminderSettings.morningTime || '09:00');
-    setCalendarReminderSecondTime(reminderSettings.secondReminderTime || '17:30');
+    applyCalendarReminderDefaults();
     setStatusVoice(`Выбрана дата ${formatCalendarDateLabel(date)}.`, false);
   }
 
@@ -1588,7 +1744,8 @@ export default function App() {
       time: String(calendarNoteTime || '09:00'),
       eventAt: selectedDate.toISOString(),
       reminderMorningTime: calendarReminderMorningTime || reminderSettings.morningTime || '09:00',
-      reminderSecondTime: calendarReminderSecondTime || reminderSettings.secondReminderTime || '17:30',
+      reminderSecondTime: calendarSecondReminderEnabled ? (calendarReminderSecondTime || reminderSettings.secondReminderTime || '17:30') : '',
+      reminderSecondEnabled: calendarSecondReminderEnabled,
       actionLabel: appointmentMeta.action || '',
       placeLabel: appointmentMeta.place || '',
       codeLabel: appointmentMeta.code || '',
@@ -1596,8 +1753,8 @@ export default function App() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    saveNote(note, true);
-    setCalendarNoteText('');
+    const saved = saveNote(note, true);
+    if (saved) setCalendarNoteText('');
   }
 
   function handleCalendarVoiceCommand(text) {
@@ -1608,16 +1765,25 @@ export default function App() {
     selectCalendarDate(targetDate);
 
     const source = normalize(text);
-    const wantsSave = includesAny(source, ['запиши', 'запомни', 'сохрани', 'оставь напоминание', 'установи уведомление', 'сделай уведомление']);
+    const wantsSave =
+      includesAny(source, ['запиши', 'запомни', 'сохрани', 'оставь напоминание', 'установи уведомление', 'сделай уведомление']) ||
+      inferType(text) === 'appointment' ||
+      includesAny(source, ['мне ', 'стриж', 'врач', 'встреч', 'прием', 'приём']);
     if (!wantsSave) return true;
 
     const content = stripCalendarVoiceContent(text);
     if (!content) return true;
 
     const allTimes = extractAllTimes(text);
-    const noteTime = allTimes[0] || calendarNoteTime || '09:00';
-    const reminderOne = allTimes[0] || reminderSettings.morningTime || '09:00';
-    const reminderTwo = allTimes[1] || reminderSettings.secondReminderTime || '17:30';
+    const reminderPlan = parseReminderVoiceSettings(text, {
+      noteTime: allTimes[0] || calendarNoteTime || '09:00',
+      morningTime: reminderSettings.morningTime || '09:00',
+      secondTime: reminderSettings.secondReminderTime || '17:30',
+      secondEnabled: reminderSettings.secondReminderEnabled ?? true
+    });
+    const noteTime = reminderPlan.noteTime || allTimes[0] || calendarNoteTime || '09:00';
+    const reminderOne = reminderPlan.morningTime || reminderSettings.morningTime || '09:00';
+    const reminderTwo = reminderPlan.secondTime || reminderSettings.secondReminderTime || '17:30';
 
     const selectedDate = new Date(targetDate);
     const [hour, minute] = String(noteTime).split(':').map(Number);
@@ -1634,7 +1800,8 @@ export default function App() {
       time: noteTime,
       eventAt: selectedDate.toISOString(),
       reminderMorningTime: reminderOne,
-      reminderSecondTime: reminderTwo,
+      reminderSecondTime: reminderPlan.secondEnabled ? reminderTwo : '',
+      reminderSecondEnabled: reminderPlan.secondEnabled,
       actionLabel: appointmentMeta.action || '',
       placeLabel: appointmentMeta.place || '',
       codeLabel: appointmentMeta.code || '',
@@ -1646,9 +1813,70 @@ export default function App() {
     setCalendarNoteTime(noteTime);
     setCalendarReminderMorningTime(reminderOne);
     setCalendarReminderSecondTime(reminderTwo);
+    setCalendarSecondReminderEnabled(reminderPlan.secondEnabled);
     setCalendarNoteText('');
-    saveNote(note, true);
-    setStatusVoice(`Сохранено на ${formatCalendarDateLabel(selectedDate)}. Напоминания: ${reminderOne} и ${reminderTwo}.`, false);
+    const saved = saveNote(note, true);
+    if (saved) {
+      const reminderSummary = reminderPlan.secondEnabled ? `${timeToLabel(reminderOne)} и ${timeToLabel(reminderTwo)}` : timeToLabel(reminderOne);
+      setStatusVoice(`Сохранено на ${formatCalendarDateLabel(selectedDate)}. Напоминания: ${reminderSummary}.`, false);
+    }
+    return true;
+  }
+
+  function handleReminderVoiceCommand(text) {
+    const source = normalize(text);
+    if (!includesAny(source, ['напоминан', 'уведомлен'])) return false;
+    if (parseCalendarTargetDate(text) && (inferType(text) === 'appointment' || includesAny(source, ['запиши', 'запомни', 'сохрани', 'мне ']))) {
+      return false;
+    }
+    const targetNote = selectedNote?.type === 'appointment' ? selectedNote : null;
+    const reminderPlan = parseReminderVoiceSettings(text, {
+      noteTime: targetNote?.time || calendarNoteTime || '09:00',
+      morningTime: targetNote?.reminderMorningTime || calendarReminderMorningTime || reminderSettings.morningTime || '09:00',
+      secondTime: targetNote?.reminderSecondTime || calendarReminderSecondTime || reminderSettings.secondReminderTime || '17:30',
+      secondEnabled: targetNote?.reminderSecondEnabled ?? calendarSecondReminderEnabled ?? reminderSettings.secondReminderEnabled ?? true
+    });
+
+    setCalendarReminderMorningTime(reminderPlan.morningTime || '09:00');
+    setCalendarReminderSecondTime(reminderPlan.secondTime || reminderSettings.secondReminderTime || '17:30');
+    setCalendarSecondReminderEnabled(reminderPlan.secondEnabled);
+
+    if (targetNote) {
+      updateNoteById(targetNote.id, note => ({
+        ...note,
+        reminderMorningTime: reminderPlan.morningTime || note.reminderMorningTime || '09:00',
+        reminderSecondTime: reminderPlan.secondEnabled ? (reminderPlan.secondTime || note.reminderSecondTime || reminderSettings.secondReminderTime || '17:30') : '',
+        reminderSecondEnabled: reminderPlan.secondEnabled
+      }));
+      setCalendarOpen(true);
+      setSettingsOpen(false);
+      const reminderSummary = reminderPlan.secondEnabled
+        ? `${timeToLabel(reminderPlan.morningTime)} и ${timeToLabel(reminderPlan.secondTime)}`
+        : timeToLabel(reminderPlan.morningTime);
+      setStatusVoice(`Напоминания обновлены: ${reminderSummary}.`, false);
+      return true;
+    }
+
+    if (calendarSelectedDate) {
+      setCalendarOpen(true);
+      setSettingsOpen(false);
+      const reminderSummary = reminderPlan.secondEnabled
+        ? `${timeToLabel(reminderPlan.morningTime)} и ${timeToLabel(reminderPlan.secondTime)}`
+        : timeToLabel(reminderPlan.morningTime);
+      setStatusVoice(`Для выбранной даты установлены напоминания: ${reminderSummary}.`, false);
+      return true;
+    }
+
+    setReminderSettings(prev => ({
+      ...prev,
+      morningTime: reminderPlan.morningTime || prev.morningTime,
+      secondReminderTime: reminderPlan.secondTime || prev.secondReminderTime,
+      secondReminderEnabled: reminderPlan.secondEnabled
+    }));
+    const reminderSummary = reminderPlan.secondEnabled
+      ? `${timeToLabel(reminderPlan.morningTime)} и ${timeToLabel(reminderPlan.secondTime)}`
+      : timeToLabel(reminderPlan.morningTime);
+    setStatusVoice(`Настройки напоминаний обновлены: ${reminderSummary}.`, false);
     return true;
   }
 
@@ -1750,12 +1978,17 @@ export default function App() {
   async function executePlan(plan, originalText) {
     if (!plan?.action || plan.action === 'unknown') return false;
     const preferredFolder = selectedFolder !== 'Все' ? selectedFolder : '';
+    const reminderDefaults = {
+      morningTime: reminderSettings.morningTime || '09:00',
+      secondTime: reminderSettings.secondReminderTime || '17:30',
+      secondEnabled: reminderSettings.secondReminderEnabled ?? true
+    };
     if (plan.action === 'save_shopping_list' && isShoppingAppendCommand(originalText)) {
       const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
       if (appendToLatestShoppingList(plan.folder || resolveSaveFolder(originalText, 'shopping_list', preferredFolder), appendItems, originalText)) return true;
     }
     if (plan.action.startsWith('save_')) {
-      const note = createNoteFromAI(plan, originalText, preferredFolder);
+      const note = createNoteFromAI(plan, originalText, preferredFolder, reminderDefaults);
       saveNote(note, Boolean(plan.showAfterSave || includesAny(originalText, ['выведи', 'покажи', 'открой', 'на экран'])));
       return true;
     }
@@ -1866,7 +2099,16 @@ export default function App() {
     setCommand(spoken);
     const source = normalizedSpoken;
     const preferredFolder = selectedFolder !== 'Все' ? selectedFolder : '';
+    const reminderDefaults = {
+      morningTime: reminderSettings.morningTime || '09:00',
+      secondTime: reminderSettings.secondReminderTime || '17:30',
+      secondEnabled: reminderSettings.secondReminderEnabled ?? true
+    };
     try {
+      if (handleReminderVoiceCommand(spoken)) {
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
       if (startsWithAny(source, ['создай папку', 'создать папку'])) {
         const folderName = extractFolderCreateName(spoken) || cleanTitle(spoken.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
         setData(prev => ({ ...prev, folders: ensureFolder(prev.folders, folderName) }));
@@ -1909,7 +2151,7 @@ export default function App() {
           }
         }
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
-        return saveNote(createNoteFromLocalText(spoken, preferredFolder), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
+        return saveNote(createNoteFromLocalText(spoken, preferredFolder, reminderDefaults), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
       }
       if (intent === 'history') {
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
@@ -2107,8 +2349,15 @@ export default function App() {
             </label>
             <label>
               <span>Второе напоминание</span>
-              <input type="time" value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '17:30' }))} />
+              <input type="time" disabled={!reminderSettings.secondReminderEnabled} value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '17:30' }))} />
             </label>
+            <div>
+              <span>2-е напоминание</span>
+              <label className="switch">
+                <input type="checkbox" checked={Boolean(reminderSettings.secondReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderEnabled: e.target.checked }))} />
+                <span className="slider" />
+              </label>
+            </div>
           </div>
         </section>
       ) : null}
@@ -2130,8 +2379,15 @@ export default function App() {
             </div>
             <div className="calendar-compose-row">
               <input type="time" value={calendarReminderMorningTime} onChange={e => setCalendarReminderMorningTime(e.target.value || '09:00')} />
-              <input type="time" value={calendarReminderSecondTime} onChange={e => setCalendarReminderSecondTime(e.target.value || '17:30')} />
+              <input type="time" disabled={!calendarSecondReminderEnabled} value={calendarReminderSecondTime} onChange={e => setCalendarReminderSecondTime(e.target.value || '17:30')} />
               <div className="calendar-reminder-label">1-е и 2-е напоминание</div>
+            </div>
+            <div className="calendar-compose-row">
+              <label className="switch">
+                <input type="checkbox" checked={Boolean(calendarSecondReminderEnabled)} onChange={e => setCalendarSecondReminderEnabled(e.target.checked)} />
+                <span className="slider" />
+              </label>
+              <div className="calendar-reminder-label">{calendarSecondReminderEnabled ? 'Второе напоминание включено' : 'Только одно напоминание'}</div>
             </div>
           </div>
           <div className="calendar-list">
