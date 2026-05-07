@@ -106,3 +106,20 @@ export function buildReminderDefaults(reminderSettings = {}) {
     secondEnabled: reminderSettings.secondReminderEnabled ?? true
   };
 }
+
+export function resolveReminderTimes(reminderPlan, reminderSettings = {}, noteTimeFallback = '09:00') {
+  return {
+    noteTime: reminderPlan.noteTime || noteTimeFallback || '09:00',
+    reminderOne: reminderPlan.morningTime || reminderSettings.morningTime || '09:00',
+    reminderTwo: reminderPlan.secondTime || reminderSettings.secondReminderTime || '17:30'
+  };
+}
+
+export function buildReminderStatusMessage(prefix, reminderPlan, toLabel, overrides = {}) {
+  const normalizedPlan = {
+    ...reminderPlan,
+    morningTime: overrides.morningTime || reminderPlan.morningTime,
+    secondTime: overrides.secondTime || reminderPlan.secondTime
+  };
+  return `${prefix}${buildReminderSummary(normalizedPlan, toLabel)}.`;
+}

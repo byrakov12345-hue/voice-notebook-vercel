@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildReminderDefaults, buildReminderPoints, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission } from './lib/notebookReminders';
+import { buildAppointmentNote, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1703,9 +1703,7 @@ export default function App() {
       secondTime: sameDayNotes[0]?.reminderSecondTime || reminderSettings.secondReminderTime || '17:30',
       secondEnabled: sameDayNotes[0]?.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true
     });
-    const noteTime = reminderPlan.noteTime || allTimes[0] || calendarNoteTime || '09:00';
-    const reminderOne = reminderPlan.morningTime || reminderSettings.morningTime || '09:00';
-    const reminderTwo = reminderPlan.secondTime || reminderSettings.secondReminderTime || '17:30';
+    const { noteTime, reminderOne, reminderTwo } = resolveReminderTimes(reminderPlan, reminderSettings, allTimes[0] || calendarNoteTime || '09:00');
 
     const selectedDate = new Date(targetDate);
     const [hour, minute] = String(noteTime).split(':').map(Number);
@@ -1743,11 +1741,9 @@ export default function App() {
           reminderSecondEnabled: reminderPlan.secondEnabled,
           time: note.time || noteTime
         }));
-        const reminderSummary = buildReminderSummary({ ...reminderPlan, morningTime: reminderOne, secondTime: reminderTwo }, voiceTimeToLabel);
-        setStatusVoice(`Для ${formatCalendarDateLabel(selectedDate)} обновлены напоминания: ${reminderSummary}.`, false);
+        setStatusVoice(buildReminderStatusMessage(`Для ${formatCalendarDateLabel(selectedDate)} обновлены напоминания: `, reminderPlan, voiceTimeToLabel, { morningTime: reminderOne, secondTime: reminderTwo }), false);
       } else {
-        const reminderSummary = buildReminderSummary({ ...reminderPlan, morningTime: reminderOne, secondTime: reminderTwo }, voiceTimeToLabel);
-        setStatusVoice(`Дата ${formatCalendarDateLabel(selectedDate)} открыта. Напоминания для новой записи: ${reminderSummary}.`, false);
+        setStatusVoice(buildReminderStatusMessage(`Дата ${formatCalendarDateLabel(selectedDate)} открыта. Напоминания для новой записи: `, reminderPlan, voiceTimeToLabel, { morningTime: reminderOne, secondTime: reminderTwo }), false);
       }
       return true;
     }
@@ -1760,16 +1756,14 @@ export default function App() {
         secondTime: reminderTwo,
         secondEnabled: reminderPlan.secondEnabled
       }, targetDate.toISOString());
-      const reminderSummary = buildReminderSummary({ ...reminderPlan, morningTime: reminderOne, secondTime: reminderTwo }, voiceTimeToLabel);
-      setStatusVoice(`Запись на ${formatCalendarDateLabel(selectedDate)} обновлена. Напоминания: ${reminderSummary}.`, false);
+      setStatusVoice(buildReminderStatusMessage(`Запись на ${formatCalendarDateLabel(selectedDate)} обновлена. Напоминания: `, reminderPlan, voiceTimeToLabel, { morningTime: reminderOne, secondTime: reminderTwo }), false);
       return true;
     }
 
     setCalendarNoteText('');
     const saved = saveNote(note, true);
     if (saved) {
-      const reminderSummary = buildReminderSummary({ ...reminderPlan, morningTime: reminderOne, secondTime: reminderTwo }, voiceTimeToLabel);
-      setStatusVoice(`Сохранено на ${formatCalendarDateLabel(selectedDate)}. Напоминания: ${reminderSummary}.`, false);
+      setStatusVoice(buildReminderStatusMessage(`Сохранено на ${formatCalendarDateLabel(selectedDate)}. Напоминания: `, reminderPlan, voiceTimeToLabel, { morningTime: reminderOne, secondTime: reminderTwo }), false);
     }
     return true;
   }
@@ -2349,28 +2343,26 @@ export default function App() {
             </label>
           </div>
           <div className="reminder-grid">
-            <label>
+            <label className="reminder-row">
               <span>Утреннее напоминание</span>
-              <input type="time" disabled={!reminderSettings.firstReminderEnabled} value={reminderSettings.morningTime} onChange={e => setReminderSettings(prev => ({ ...prev, morningTime: e.target.value || '09:00' }))} />
+              <div className="reminder-input-row">
+                <input type="time" disabled={!reminderSettings.firstReminderEnabled} value={reminderSettings.morningTime} onChange={e => setReminderSettings(prev => ({ ...prev, morningTime: e.target.value || '09:00' }))} />
+                <label className="switch">
+                  <input type="checkbox" checked={Boolean(reminderSettings.firstReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, firstReminderEnabled: e.target.checked }))} />
+                  <span className="slider" />
+                </label>
+              </div>
             </label>
-            <label>
+            <label className="reminder-row">
               <span>Второе напоминание</span>
-              <input type="time" disabled={!reminderSettings.secondReminderEnabled} value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '17:30' }))} />
+              <div className="reminder-input-row">
+                <input type="time" disabled={!reminderSettings.secondReminderEnabled} value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '17:30' }))} />
+                <label className="switch">
+                  <input type="checkbox" checked={Boolean(reminderSettings.secondReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderEnabled: e.target.checked }))} />
+                  <span className="slider" />
+                </label>
+              </div>
             </label>
-            <div>
-              <span>1-е напоминание</span>
-              <label className="switch">
-                <input type="checkbox" checked={Boolean(reminderSettings.firstReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, firstReminderEnabled: e.target.checked }))} />
-                <span className="slider" />
-              </label>
-            </div>
-            <div>
-              <span>2-е напоминание</span>
-              <label className="switch">
-                <input type="checkbox" checked={Boolean(reminderSettings.secondReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderEnabled: e.target.checked }))} />
-                <span className="slider" />
-              </label>
-            </div>
           </div>
         </section>
       ) : null}
@@ -2398,22 +2390,20 @@ export default function App() {
               <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на эту дату" />
               <button className="primary" onClick={saveCalendarNote}>Сохранить</button>
             </div>
-            <div className="calendar-compose-row">
-              <input type="time" disabled={!calendarFirstReminderEnabled} value={calendarReminderMorningTime} onChange={e => setCalendarReminderMorningTime(e.target.value || '09:00')} />
-              <input type="time" disabled={!calendarSecondReminderEnabled} value={calendarReminderSecondTime} onChange={e => setCalendarReminderSecondTime(e.target.value || '17:30')} />
-              <div className="calendar-reminder-label">1-е и 2-е напоминание</div>
-            </div>
-            <div className="calendar-compose-row">
-              <label className="switch">
-                <input type="checkbox" checked={Boolean(calendarFirstReminderEnabled)} onChange={e => setCalendarFirstReminderEnabled(e.target.checked)} />
-                <span className="slider" />
-              </label>
-              <label className="switch">
-                <input type="checkbox" checked={Boolean(calendarSecondReminderEnabled)} onChange={e => setCalendarSecondReminderEnabled(e.target.checked)} />
-                <span className="slider" />
-              </label>
-              <div className="calendar-reminder-label">
-                {calendarFirstReminderEnabled ? '1-е включено' : '1-е выключено'} · {calendarSecondReminderEnabled ? '2-е включено' : '2-е выключено'}
+            <div className="calendar-reminder-stack">
+              <div className="calendar-reminder-item">
+                <input type="time" disabled={!calendarFirstReminderEnabled} value={calendarReminderMorningTime} onChange={e => setCalendarReminderMorningTime(e.target.value || '09:00')} />
+                <label className="switch">
+                  <input type="checkbox" checked={Boolean(calendarFirstReminderEnabled)} onChange={e => setCalendarFirstReminderEnabled(e.target.checked)} />
+                  <span className="slider" />
+                </label>
+              </div>
+              <div className="calendar-reminder-item">
+                <input type="time" disabled={!calendarSecondReminderEnabled} value={calendarReminderSecondTime} onChange={e => setCalendarReminderSecondTime(e.target.value || '17:30')} />
+                <label className="switch">
+                  <input type="checkbox" checked={Boolean(calendarSecondReminderEnabled)} onChange={e => setCalendarSecondReminderEnabled(e.target.checked)} />
+                  <span className="slider" />
+                </label>
               </div>
             </div>
           </div>
