@@ -1182,6 +1182,8 @@ export default function App() {
   const useAI = true;
   const recognitionRef = useRef(null);
   const lastCommandRef = useRef({ text: '', at: 0 });
+  const lastHandledCommandRef = useRef({ text: '', at: 0 });
+  const processingCommandRef = useRef(false);
   const lastSavedRef = useRef({ signature: '', at: 0 });
   const firedReminderRef = useRef(new Set());
 
@@ -1847,6 +1849,10 @@ export default function App() {
     if (!spoken) return;
     const normalizedSpoken = normalize(spoken);
     const nowTs = Date.now();
+    if (processingCommandRef.current) {
+      setStatusVoice('Команда уже обрабатывается.', false);
+      return;
+    }
     if (
       lastCommandRef.current.text === normalizedSpoken &&
       nowTs - lastCommandRef.current.at < 8000
@@ -1854,115 +1860,144 @@ export default function App() {
       setStatusVoice('Повтор команды пропущен.', false);
       return;
     }
+    if (
+      lastHandledCommandRef.current.text === normalizedSpoken &&
+      nowTs - lastHandledCommandRef.current.at < 20000
+    ) {
+      setStatusVoice('Повтор команды пропущен.', false);
+      return;
+    }
     lastCommandRef.current = { text: normalizedSpoken, at: nowTs };
+    processingCommandRef.current = true;
     setCommand(spoken);
     const source = normalizedSpoken;
-
-    if (startsWithAny(source, ['создай папку', 'создать папку'])) {
-      const folderName = extractFolderCreateName(spoken) || cleanTitle(spoken.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
-      setData(prev => ({ ...prev, folders: ensureFolder(prev.folders, folderName) }));
-      setSelectedFolder(folderName);
-      setSelectedId(null);
-      setSuggestedFolder('');
-      return setStatusVoice(`Папка ${folderName} создана или уже существует.`);
-    }
-
-    if (
-      source.match(/\bна\s+\d{1,2}\s+число\b/i) ||
-      source.match(/\b\d{1,2}\s+число(?:\s+этого\s+месяца)?\b/i) ||
-      source.match(/\b\d{1,2}\s+(январ|феврал|март|апрел|мая|май|июн|июл|август|сентябр|октябр|ноябр|декабр)/i)
-    ) {
-      if (handleCalendarVoiceCommand(spoken)) return;
-    }
-
-    if (useAI) {
-      setStatus('Локальный AI разбирает команду...');
-      const plan = localAIPlan(spoken, data, selectedNote);
-      const handled = await executePlan(plan, spoken);
-      if (handled) return;
-    }
-
-    const intent = detectIntent(spoken);
-    if (intent === 'save') {
-      if (isShoppingAppendCommand(spoken)) {
-        const targetFolder = resolveFolderName(spoken, 'shopping_list');
-        const items = extractItems(spoken);
-        if (appendToLatestShoppingList(targetFolder, items, spoken)) return;
+    try {
+      if (startsWithAny(source, ['создай папку', 'создать папку'])) {
+        const folderName = extractFolderCreateName(spoken) || cleanTitle(spoken.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
+        setData(prev => ({ ...prev, folders: ensureFolder(prev.folders, folderName) }));
+        setSelectedFolder(folderName);
+        setSelectedId(null);
+        setSuggestedFolder('');
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return setStatusVoice(`Папка ${folderName} создана или уже существует.`);
       }
-      return saveNote(createNoteFromLocalText(spoken), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
-    }
-    if (intent === 'history') {
-      if (includesAny(spoken, ['вчера', 'вчераш'])) return showPeriod('yesterday');
-      if (includesAny(spoken, ['неделе', 'неделя'])) return showPeriod('week');
-      return showPeriod('today');
-    }
-    if (intent === 'edit') return openLatestForEdit();
-    if (intent === 'rename') return renameCurrentNote(extractRenameValue(spoken));
-    if (intent === 'move') return moveCurrentNote(extractMoveFolderName(spoken));
-    if (intent === 'append') return appendToCurrentNote(extractAppendText(spoken));
-    if (intent === 'search') return performSearch(spoken);
-    if (intent === 'show_latest') return showLatest(spoken);
-    if (intent === 'delete') return handleDelete(spoken);
-    if (intent === 'open_folder') {
-      const folderMatch = findFolderByText(data.folders, spoken);
-      return folderMatch ? openFolder(folderMatch.name) : setStatusVoice('Не понял, какую папку открыть.', false);
-    }
-    if (intent === 'copy') {
-      const folderMatch = findFolderByText(data.folders, spoken);
-      if (folderMatch) {
-        const latestInFolder = [...data.notes]
-          .filter(note => note.folder === folderMatch.name)
-          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-        if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
-        openNote(latestInFolder);
-        copyNote(latestInFolder);
-        setSuggestedFolder(folderMatch.name);
-        return;
+
+      if (
+        source.match(/\bна\s+\d{1,2}\s+число\b/i) ||
+        source.match(/\b\d{1,2}\s+число(?:\s+этого\s+месяца)?\b/i) ||
+        source.match(/\b\d{1,2}\s+(январ|феврал|март|апрел|мая|май|июн|июл|август|сентябр|октябр|ноябр|декабр)/i)
+      ) {
+        if (handleCalendarVoiceCommand(spoken)) {
+          lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+          return;
+        }
       }
-      return selectedNote ? copyNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
-    }
-    if (intent === 'share') return selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
-    if (intent === 'read') {
-      const folderMatch = findFolderByText(data.folders, spoken);
-      if (folderMatch?.name === 'Контакты' || includesAny(spoken, ['номер', 'телефон', 'контакт'])) {
-        const latestContact = [...data.notes]
-          .filter(note => note.folder === 'Контакты' || note.type === 'contact')
-          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-        if (!latestContact) return setStatusVoice('В папке Контакты пока нет записей.');
-        openNote(latestContact);
-        speak(contactSpeechText(latestContact), selectedVoiceURI, selectedVoiceStyle);
-        setSuggestedFolder('Контакты');
-        setStatus('');
-        return;
+
+      if (useAI) {
+        setStatus('Локальный AI разбирает команду...');
+        const plan = localAIPlan(spoken, data, selectedNote);
+        const handled = await executePlan(plan, spoken);
+        if (handled) {
+          lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+          return;
+        }
       }
-      if (folderMatch) {
-        const latestInFolder = [...data.notes]
-          .filter(note => note.folder === folderMatch.name)
-          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-        if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
-        openNote(latestInFolder);
-        speak(shareText(latestInFolder), selectedVoiceURI, selectedVoiceStyle);
-        setSuggestedFolder(folderMatch.name);
-        setStatus('');
-        return;
+
+      const intent = detectIntent(spoken);
+      if (intent === 'save') {
+        if (isShoppingAppendCommand(spoken)) {
+          const targetFolder = resolveFolderName(spoken, 'shopping_list');
+          const items = extractItems(spoken);
+          if (appendToLatestShoppingList(targetFolder, items, spoken)) {
+            lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+            return;
+          }
+        }
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return saveNote(createNoteFromLocalText(spoken), includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран']));
       }
-      return selectedNote ? speak(shareText(selectedNote), selectedVoiceURI, selectedVoiceStyle) : setStatusVoice('Сначала откройте запись.');
+      if (intent === 'history') {
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        if (includesAny(spoken, ['вчера', 'вчераш'])) return showPeriod('yesterday');
+        if (includesAny(spoken, ['неделе', 'неделя'])) return showPeriod('week');
+        return showPeriod('today');
+      }
+      if (intent === 'edit') { lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() }; return openLatestForEdit(); }
+      if (intent === 'rename') { lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() }; return renameCurrentNote(extractRenameValue(spoken)); }
+      if (intent === 'move') { lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() }; return moveCurrentNote(extractMoveFolderName(spoken)); }
+      if (intent === 'append') { lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() }; return appendToCurrentNote(extractAppendText(spoken)); }
+      if (intent === 'search') { lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() }; return performSearch(spoken); }
+      if (intent === 'show_latest') { lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() }; return showLatest(spoken); }
+      if (intent === 'delete') { lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() }; return handleDelete(spoken); }
+      if (intent === 'open_folder') {
+        const folderMatch = findFolderByText(data.folders, spoken);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return folderMatch ? openFolder(folderMatch.name) : setStatusVoice('Не понял, какую папку открыть.', false);
+      }
+      if (intent === 'copy') {
+        const folderMatch = findFolderByText(data.folders, spoken);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        if (folderMatch) {
+          const latestInFolder = [...data.notes]
+            .filter(note => note.folder === folderMatch.name)
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+          if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
+          openNote(latestInFolder);
+          copyNote(latestInFolder);
+          setSuggestedFolder(folderMatch.name);
+          return;
+        }
+        return selectedNote ? copyNote(selectedNote) : setStatusVoice('Сначала откройте запись.');
+      }
+      if (intent === 'share') { lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() }; return selectedNote ? shareNote(selectedNote) : setStatusVoice('Сначала откройте запись.'); }
+      if (intent === 'read') {
+        const folderMatch = findFolderByText(data.folders, spoken);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        if (folderMatch?.name === 'Контакты' || includesAny(spoken, ['номер', 'телефон', 'контакт'])) {
+          const latestContact = [...data.notes]
+            .filter(note => note.folder === 'Контакты' || note.type === 'contact')
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+          if (!latestContact) return setStatusVoice('В папке Контакты пока нет записей.');
+          openNote(latestContact);
+          speak(contactSpeechText(latestContact), selectedVoiceURI, selectedVoiceStyle);
+          setSuggestedFolder('Контакты');
+          setStatus('');
+          return;
+        }
+        if (folderMatch) {
+          const latestInFolder = [...data.notes]
+            .filter(note => note.folder === folderMatch.name)
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+          if (!latestInFolder) return setStatusVoice(`В папке ${folderMatch.name} пока нет записей.`);
+          openNote(latestInFolder);
+          speak(shareText(latestInFolder), selectedVoiceURI, selectedVoiceStyle);
+          setSuggestedFolder(folderMatch.name);
+          setStatus('');
+          return;
+        }
+        return selectedNote ? speak(shareText(selectedNote), selectedVoiceURI, selectedVoiceStyle) : setStatusVoice('Сначала откройте запись.');
+      }
+      if (intent === 'call') {
+        const found = searchNotes(data.notes.filter(n => n.type === 'contact'), spoken)[0] || selectedNote;
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return found?.type === 'contact' ? callNote(found) : setStatusVoice('Не нашёл контакт для звонка.');
+      }
+      if (intent === 'message') {
+        const found = searchNotes(data.notes.filter(n => n.type === 'contact'), spoken)[0] || selectedNote;
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return found?.type === 'contact' ? messageNote(found) : setStatusVoice('Не нашёл контакт для сообщения.');
+      }
+      if (intent === 'create_folder') {
+        const name = extractExplicitFolder(spoken) || cleanTitle(spoken.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
+        setData(prev => ({ ...prev, folders: ensureFolder(prev.folders, name) }));
+        setSelectedFolder(name);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return setStatusVoice(`Папка ${name} создана или уже существует.`);
+      }
+      setStatusVoice('Я пока не понял команду. Попробуйте сказать: запомни идею, найди заметку, покажи последнюю.');
+    } finally {
+      processingCommandRef.current = false;
     }
-    if (intent === 'call') {
-      const found = searchNotes(data.notes.filter(n => n.type === 'contact'), spoken)[0] || selectedNote;
-      return found?.type === 'contact' ? callNote(found) : setStatusVoice('Не нашёл контакт для звонка.');
-    }
-    if (intent === 'message') {
-      const found = searchNotes(data.notes.filter(n => n.type === 'contact'), spoken)[0] || selectedNote;
-      return found?.type === 'contact' ? messageNote(found) : setStatusVoice('Не нашёл контакт для сообщения.');
-    }
-    if (intent === 'create_folder') {
-      const name = extractExplicitFolder(spoken) || cleanTitle(spoken.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
-      setData(prev => ({ ...prev, folders: ensureFolder(prev.folders, name) }));
-      setSelectedFolder(name);
-      return setStatusVoice(`Папка ${name} создана или уже существует.`);
-    }
-    setStatusVoice('Я пока не понял команду. Попробуйте сказать: запомни идею, найди заметку, покажи последнюю.');
   }
 
   function startListening() {
