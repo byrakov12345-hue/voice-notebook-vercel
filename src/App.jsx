@@ -288,6 +288,8 @@ function extractAppointmentDateLabel(text) {
   if (sameMonthMatch) return `${sameMonthMatch[1]} число`;
   const monthMatch = source.match(/\b(\d{1,2})\s+(?:число\s+)?(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i);
   if (monthMatch) return `${monthMatch[1]} ${monthMatch[2]}`;
+  const reverseMonthMatch = source.match(/\b(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\s+(\d{1,2})(?:\s+число)?\b/i);
+  if (reverseMonthMatch) return `${reverseMonthMatch[2]} ${reverseMonthMatch[1]}`;
   const weekdays = ['понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу', 'воскресенье'];
   return weekdays.find(day => source.includes(day)) || '';
 }
@@ -302,9 +304,11 @@ function parseAppointmentDateTime(text) {
   let eventDate = null;
 
   const monthMatch = source.match(/\b(\d{1,2})\s+(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i);
-  if (monthMatch) {
-    const day = Number(monthMatch[1]);
-    const monthKey = Object.keys(months).find(key => monthMatch[2].startsWith(key.slice(0, 5)));
+  const reverseMonthMatch = source.match(/\b(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\s+(\d{1,2})(?:\s+число)?\b/i);
+  if (monthMatch || reverseMonthMatch) {
+    const day = Number(monthMatch ? monthMatch[1] : reverseMonthMatch[2]);
+    const monthToken = monthMatch ? monthMatch[2] : reverseMonthMatch[1];
+    const monthKey = Object.keys(months).find(key => monthToken.startsWith(key.slice(0, 5)));
     if (day && monthKey) {
       let year = now.getFullYear();
       const probe = new Date(year, months[monthKey], day, 12, 0, 0, 0);
@@ -352,7 +356,8 @@ function parseAppointmentDateTime(text) {
 function extractAppointmentMeta(text) {
   const source = String(text || '').trim();
   const codeMatch = source.match(/код\s+([0-9]{2,})/i);
-  const actionMatch = source.match(/(?:нужно|надо|мне)\s+(.+?)(?:,|$)/i) || source.match(/(?:завтра|сегодня|послезавтра|\d{1,2}\s+[А-Яа-я]+)\s+(.+?)(?:,|$)/i);
+  const actionMatch = source.match(/(?:нужно|надо|мне)\s+(.+?)(?:,|$)/i)
+    || source.match(/(?:завтра|сегодня|послезавтра|\d{1,2}\s+[А-Яа-я]+|[А-Яа-я]+\s+\d{1,2})\s+(.+?)(?:,|$)/i);
   const placeMatch = source.match(/\b(?:на|в)\s+([А-Яа-яA-Za-z0-9][^,]+?)(?:\s+код|\s+в\s+\d|\s*$)/i);
   return {
     action: actionMatch?.[1]?.trim() || '',
@@ -545,6 +550,15 @@ function parseCalendarTargetDate(text) {
   }
 
   if (day === null) {
+    const reverseMonthMatch = source.match(/\b(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\s+(\d{1,2})(?:\s+число)?\b/i);
+    if (reverseMonthMatch) {
+      day = Number(reverseMonthMatch[2]);
+      const monthKey = Object.keys(months).find(key => reverseMonthMatch[1].startsWith(key));
+      if (monthKey) month = months[monthKey];
+    }
+  }
+
+  if (day === null) {
     const simpleThisMonth = source.match(/\b(\d{1,2})\s+число\b/i);
     if (simpleThisMonth) {
       day = Number(simpleThisMonth[1]);
@@ -565,6 +579,7 @@ function stripCalendarVoiceContent(text) {
     .replace(/^(открой|отметь|запиши|запомни|сохрани)\s+/i, '')
     .replace(/\b\d{1,2}\s+число\s+этого\s+месяца\b/i, '')
     .replace(/\b\d{1,2}\s+(?:число\s+)?(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\b/i, '')
+    .replace(/\b(январ[яь]|феврал[яь]|март[ае]?|апрел[яь]|мая|май|июн[яь]|июл[яь]|август[ае]?|сентябр[яь]|октябр[яь]|ноябр[яь]|декабр[яь])\s+\d{1,2}(?:\s+число)?\b/i, '')
     .replace(/\bоставь\s+напоминание\b/i, '')
     .replace(/\bсделай\s+уведомление\b/i, '')
     .replace(/\bустанови\s+уведомление\b/i, '')
