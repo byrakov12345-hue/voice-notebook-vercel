@@ -6,6 +6,7 @@ import {
   stripCalendarVoiceContent
 } from '../src/lib/voiceCalendar.js';
 import { isLikelyGroceryItem, shouldAppendShoppingList } from '../src/lib/notebookRules.js';
+import { buildReminderPoints } from '../src/lib/notebookReminders.js';
 
 const fixedNow = new Date('2026-05-07T10:00:00.000Z');
 
@@ -25,6 +26,19 @@ assert.equal(todayShopping.time, '20:00');
 const futureShopping = parseAppointmentDateTime('купить батон 9 мая в 8 вечера', fixedNow);
 assert.equal(isoDay(futureShopping.eventAt), '2026-05-09');
 assert.equal(futureShopping.time, '20:00');
+
+const explicitReminderPoints = buildReminderPoints({
+  id: 'note-test',
+  type: 'appointment',
+  title: 'Купить батон',
+  dateLabel: '9 мая 2026 г.',
+  time: '20:00',
+  eventAt: futureShopping.eventAt,
+  reminderFirstEnabled: false,
+  reminderExplicitAt: futureShopping.eventAt
+}, { enabled: true, defaultReminderOffset: '1h' });
+assert.equal(explicitReminderPoints.length, 1);
+assert.equal(explicitReminderPoints[0].at.toISOString(), futureShopping.eventAt);
 
 const datedShoppingNoTime = parseAppointmentDateTime('8 мая купить в магазине батон', fixedNow);
 assert.equal(isoDay(datedShoppingNoTime.eventAt), '2026-05-08');

@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes, supportsScheduledNotifications } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes, showReminderNotification, supportsScheduledNotifications } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1188,11 +1188,7 @@ export default function App() {
       const key = `${note.id}_${label}_${remindAt.toISOString()}`;
       if (firedReminderRef.current.has(key)) return;
       firedReminderRef.current.add(key);
-      if (Notification.permission === 'granted') {
-        new Notification(note.title || 'Напоминание', {
-          body: [note.dateLabel, note.time, note.placeLabel || note.content].filter(Boolean).join(' · ')
-        });
-      }
+      showReminderNotification(note, label);
       speak(`Напоминание: ${note.title}.`, selectedVoiceURI, selectedVoiceStyle);
     };
     const scheduleNotification = (note, remindAt, label) => {
@@ -1272,10 +1268,7 @@ export default function App() {
           if (point.at.getTime() <= Date.now()) continue;
           try {
             await registration.showNotification(note.title || 'Напоминание', {
-              body: [note.dateLabel, note.time, note.placeLabel || note.content].filter(Boolean).join(' · '),
-              tag: `smart-voice-note:${note.id}:${point.label}`,
-              renotify: false,
-              data: { noteId: note.id, pointLabel: point.label },
+              ...buildNotificationOptions(note, point.label),
               showTrigger: new window.TimestampTrigger(point.at.getTime())
             });
           } catch {

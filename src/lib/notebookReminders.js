@@ -61,7 +61,7 @@ export function buildReminderPoints(note, reminderSettings = {}) {
   if (!note || note.type !== 'appointment' || !note.eventAt) return [];
   const eventAt = new Date(note.eventAt);
   if (Number.isNaN(eventAt.getTime())) return [];
-  const firstEnabled = note.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true;
+  const firstEnabled = reminderSettings.enabled ?? reminderSettings.firstReminderEnabled ?? true;
   if (!firstEnabled) return [];
   const primaryAt = resolveSingleReminderAt(note, reminderSettings);
   if (!primaryAt) return [];
@@ -87,6 +87,41 @@ export function supportsScheduledNotifications() {
     && 'showTrigger' in Notification.prototype
     && 'serviceWorker' in navigator
     && 'TimestampTrigger' in window;
+}
+
+export function buildNotificationOptions(note, pointLabel = 'primary') {
+  return {
+    body: [note.dateLabel, note.time, note.placeLabel || note.content].filter(Boolean).join(' · '),
+    tag: `smart-voice-note:${note.id}:${pointLabel}`,
+    renotify: true,
+    requireInteraction: true,
+    vibrate: [180, 80, 180],
+    data: { noteId: note.id, pointLabel }
+  };
+}
+
+export async function showReminderNotification(note, pointLabel = 'primary') {
+  if (!note || !isNotificationSupported() || Notification.permission !== 'granted') return false;
+  const title = note.title || 'Напоминание';
+  const options = buildNotificationOptions(note, pointLabel);
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration?.showNotification) {
+        await registration.showNotification(title, options);
+        return true;
+      }
+    }
+  } catch {
+    // Fall through to the page Notification API when the service worker is unavailable.
+  }
+
+  try {
+    new Notification(title, options);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function requestNotificationPermission() {
