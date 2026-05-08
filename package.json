@@ -14,10 +14,11 @@
     "smoke:voice": "node scripts/voice-smoke.mjs"
   },
   "dependencies": {
+    "@vercel/blob": "^2.3.3",
     "@vitejs/plugin-react": "6.0.1",
-    "vite": "8.0.10",
     "react": "19.2.5",
-    "react-dom": "19.2.5"
-  },
-  "devDependencies": {}
+    "react-dom": "19.2.5",
+    "vite": "8.0.10",
+    "web-push": "^3.6.7"
+  }
 }

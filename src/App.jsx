@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1250,6 +1250,7 @@ export default function App() {
     const sync = async () => {
       if (cancelled) return;
       await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
+      await syncServerPushReminderSchedule(data.notes, reminderSettings);
     };
     sync();
     const intervalId = window.setInterval(sync, 60000);
@@ -1984,6 +1985,7 @@ export default function App() {
     const result = await requestNotificationPermission();
     if (result === 'granted') {
       await showServiceWorkerTestNotification();
+      await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
       setStatusVoice('Уведомления разрешены. Проверка отправлена в шторку.', false);
     } else {
       setStatusVoice('Разрешение на уведомления не выдано.', false);
@@ -1999,12 +2001,17 @@ export default function App() {
     setReminderSettings(prev => ({ ...prev, enabled: Boolean(result.enabled) }));
     if (result.status === 'disabled') {
       await syncServiceWorkerReminderSchedule([], { ...reminderSettings, enabled: false });
+      await syncServerPushReminderSchedule([], { ...reminderSettings, enabled: false });
       return setStatusVoice('Напоминания выключены.', false);
     }
     if (result.status !== 'granted') return setStatusVoice('Разрешение на уведомления не выдано.', false);
     await showServiceWorkerTestNotification();
     await syncServiceWorkerReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
-    setStatusVoice('Напоминания включены. Проверка отправлена в шторку.', false);
+    const serverPush = await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
+    setStatusVoice(serverPush.ok
+      ? 'Напоминания включены. Серверная доставка подключена.'
+      : 'Напоминания включены локально. Для закрытого телефона нужно серверное хранилище.',
+    false);
   }
 
   async function shareNote(note) {

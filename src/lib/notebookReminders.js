@@ -18,6 +18,15 @@ function parseTimeParts(value, fallbackHour = 9, fallbackMinute = 0) {
   ];
 }
 
+function urlBase64ToUint8Array(value) {
+  const padding = '='.repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = window.atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
+  return output;
+}
+
 function normalizeReminderAt(eventAt, reminderAt, settings = {}, wasExplicit = false) {
   if (!(reminderAt instanceof Date) || Number.isNaN(reminderAt.getTime())) return null;
   if (wasExplicit) return reminderAt;
@@ -162,6 +171,80 @@ export async function syncServiceWorkerReminderSchedule(notes = [], reminderSett
     return true;
   } catch {
     return false;
+  }
+}
+
+function buildReminderPayloads(notes = [], reminderSettings = {}) {
+  const reminders = [];
+  notes
+    .filter(note => note?.type === 'appointment' && note.eventAt)
+    .forEach(note => {
+      buildReminderPoints(note, reminderSettings)
+        .filter(point => point.at.getTime() > Date.now())
+        .forEach(point => {
+          const options = buildNotificationOptions(note, point.label);
+          reminders.push({
+            key: options.tag,
+            at: point.at.getTime(),
+            title: note.title || 'Напоминание',
+            noteId: note.id,
+            label: point.label,
+            options
+          });
+        });
+    });
+  return reminders;
+}
+
+async function fetchPushConfig() {
+  const response = await fetch('/api/push-config');
+  if (!response.ok) return { serverPushReady: false };
+  return response.json();
+}
+
+export async function syncServerPushReminderSchedule(notes = [], reminderSettings = {}) {
+  if (
+    typeof window === 'undefined' ||
+    !('serviceWorker' in navigator) ||
+    !('PushManager' in window) ||
+    !isNotificationSupported() ||
+    Notification.permission !== 'granted'
+  ) {
+    return { ok: false, status: 'unsupported' };
+  }
+
+  try {
+    const config = await fetchPushConfig();
+    if (!config?.vapidConfigured) return { ok: false, status: 'vapid_missing' };
+    if (!config?.storageConfigured) return { ok: false, status: 'storage_missing' };
+
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(config.publicKey)
+      });
+    }
+
+    const response = await fetch('/api/reminders-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription: subscription.toJSON(),
+        reminders: buildReminderPayloads(notes, reminderSettings)
+      })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      return { ok: false, status: payload?.error || `sync_failed_${response.status}` };
+    }
+
+    const payload = await response.json();
+    return { ok: true, status: 'synced', reminders: payload.reminders || 0 };
+  } catch (error) {
+    return { ok: false, status: error?.message || 'sync_failed' };
   }
 }
 

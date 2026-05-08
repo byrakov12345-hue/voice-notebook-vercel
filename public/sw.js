@@ -17,7 +17,7 @@ function notificationOptionsFromPayload(item) {
 }
 
 async function showReminder(item) {
-  await self.registration.showNotification(item?.title || 'Напоминание', notificationOptionsFromPayload(item));
+  await self.registration.showNotification(item?.title || item?.options?.title || 'Напоминание', notificationOptionsFromPayload(item));
 }
 
 function scheduleReminder(item) {
@@ -71,7 +71,12 @@ self.addEventListener('push', event => {
   } catch {
     payload = { title: 'АИ Блокнот', options: { body: event.data?.text() || 'Напоминание' } };
   }
-  event.waitUntil(showReminder(payload));
+  event.waitUntil(showReminder({
+    title: payload.title,
+    options: payload.options || {},
+    noteId: payload.options?.data?.noteId || null,
+    label: payload.options?.data?.pointLabel || 'primary'
+  }));
 });
 
 self.addEventListener('notificationclick', event => {
