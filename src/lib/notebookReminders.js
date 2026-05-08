@@ -1,10 +1,80 @@
+function parseOffsetMinutes(value, customValue = 60) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value === '15m') return 15;
+  if (value === '30m') return 30;
+  if (value === '1h') return 60;
+  if (value === '1d') return 1440;
+  if (value === 'custom') return Number(customValue) > 0 ? Number(customValue) : 60;
+  return 60;
+}
+
+function parseTimeParts(value, fallbackHour = 9, fallbackMinute = 0) {
+  const [hourRaw, minuteRaw] = String(value || '').split(':');
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  return [
+    Number.isFinite(hour) ? hour : fallbackHour,
+    Number.isFinite(minute) ? minute : fallbackMinute
+  ];
+}
+
+function normalizeReminderAt(eventAt, reminderAt, settings = {}, wasExplicit = false) {
+  if (!(reminderAt instanceof Date) || Number.isNaN(reminderAt.getTime())) return null;
+  if (wasExplicit) return reminderAt;
+
+  const quietEnd = settings.quietHoursEnd || '07:00';
+  const [quietEndHour] = parseTimeParts(quietEnd, 7, 0);
+  if (reminderAt.getHours() < quietEndHour) {
+    const shifted = new Date(eventAt);
+    shifted.setDate(shifted.getDate() - 1);
+    shifted.setHours(20, 0, 0, 0);
+    return shifted;
+  }
+  return reminderAt;
+}
+
+function resolveSingleReminderAt(note, reminderSettings = {}) {
+  const eventAt = new Date(note.eventAt);
+  if (Number.isNaN(eventAt.getTime())) return null;
+
+  if (note.reminderExplicitAt) {
+    const explicitAt = new Date(note.reminderExplicitAt);
+    if (!Number.isNaN(explicitAt.getTime())) return explicitAt;
+  }
+
+  if (note.reminderUseMorningTime) {
+    const morningAt = new Date(eventAt);
+    const [hour, minute] = parseTimeParts(reminderSettings.morningReminderTime || reminderSettings.morningTime || '09:00', 9, 0);
+    morningAt.setHours(hour, minute, 0, 0);
+    return normalizeReminderAt(eventAt, morningAt, reminderSettings, false);
+  }
+
+  const offsetMinutes = parseOffsetMinutes(
+    note.reminderOffsetType || reminderSettings.defaultReminderOffset || '1h',
+    note.reminderCustomOffsetMinutes || reminderSettings.customReminderOffsetMinutes || 60
+  );
+  const offsetAt = new Date(eventAt.getTime() - offsetMinutes * 60 * 1000);
+  return normalizeReminderAt(eventAt, offsetAt, reminderSettings, false);
+}
+
 export function buildReminderPoints(note, reminderSettings = {}) {
   if (!note || note.type !== 'appointment' || !note.eventAt) return [];
   const eventAt = new Date(note.eventAt);
   if (Number.isNaN(eventAt.getTime())) return [];
   const firstEnabled = note.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true;
   if (!firstEnabled) return [];
-  return [{ at: eventAt, label: 'event' }];
+  const primaryAt = resolveSingleReminderAt(note, reminderSettings);
+  if (!primaryAt) return [];
+  const points = [{ at: primaryAt, label: 'primary' }];
+
+  const secondEnabled = note.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? false;
+  if (secondEnabled) {
+    const secondAt = new Date(primaryAt);
+    const [hour, minute] = parseTimeParts(reminderSettings.secondReminderTime || '20:00', 20, 0);
+    secondAt.setHours(hour, minute, 0, 0);
+    points.push({ at: secondAt, label: 'secondary' });
+  }
+  return points;
 }
 
 export function isNotificationSupported() {
@@ -80,10 +150,12 @@ export function buildAppointmentNote({
 
 export function buildReminderDefaults(reminderSettings = {}) {
   return {
-    morningTime: reminderSettings.morningTime || '09:00',
+    morningTime: reminderSettings.morningReminderTime || reminderSettings.morningTime || '09:00',
     firstEnabled: reminderSettings.enabled ?? false,
     secondTime: '',
-    secondEnabled: false
+    secondEnabled: Boolean(reminderSettings.secondReminderEnabled ?? false),
+    offsetType: reminderSettings.defaultReminderOffset || '1h',
+    customOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60)
   };
 }
 

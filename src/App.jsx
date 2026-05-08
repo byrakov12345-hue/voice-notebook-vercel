@@ -682,6 +682,10 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
         eventAt: eventMeta.eventAt || new Date().toISOString(),
         reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? false),
         reminderMorningTime: timedReminder,
+        reminderExplicitAt: eventMeta.eventAt || '',
+        reminderUseMorningTime: false,
+        reminderOffsetType: reminderDefaults.offsetType || '1h',
+        reminderCustomOffsetMinutes: reminderDefaults.customOffsetMinutes || 60,
         reminderSecondTime: '',
         reminderSecondEnabled: false,
         tags: ['покупки', 'магазин', ...items],
@@ -715,6 +719,10 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
       dateLabel: eventMeta.dateLabel, time: eventMeta.time, eventAt: eventMeta.eventAt,
       reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? false),
       reminderMorningTime: eventMeta.time || reminderDefaults.morningTime || '09:00',
+      reminderExplicitAt: '',
+      reminderUseMorningTime: !eventMeta.time && normalize(text).includes('утром'),
+      reminderOffsetType: reminderDefaults.offsetType || '1h',
+      reminderCustomOffsetMinutes: reminderDefaults.customOffsetMinutes || 60,
       reminderSecondTime: '',
       reminderSecondEnabled: false,
       actionLabel: appointmentMeta.action, placeLabel: appointmentMeta.place, codeLabel: appointmentMeta.code,
@@ -768,6 +776,10 @@ function createNoteFromAI(plan, fallbackText, preferredFolder = '', reminderDefa
       eventAt: plan.eventAt || eventMeta.eventAt,
       reminderFirstEnabled: Boolean(plan.reminderFirstEnabled ?? reminderDefaults.firstEnabled ?? false),
       reminderMorningTime: plan.time || eventMeta.time || plan.reminderMorningTime || reminderDefaults.morningTime || '09:00',
+      reminderExplicitAt: plan.reminderExplicitAt || '',
+      reminderUseMorningTime: Boolean(plan.reminderUseMorningTime ?? false),
+      reminderOffsetType: plan.reminderOffsetType || reminderDefaults.offsetType || '1h',
+      reminderCustomOffsetMinutes: Number(plan.reminderCustomOffsetMinutes || reminderDefaults.customOffsetMinutes || 60),
       reminderSecondTime: '',
       reminderSecondEnabled: false,
       actionLabel: plan.actionLabel || appointmentMeta.action,
@@ -1058,22 +1070,32 @@ export default function App() {
   const [calendarSelectedDate, setCalendarSelectedDate] = useState('');
   const [calendarNoteText, setCalendarNoteText] = useState('');
   const [calendarNoteTime, setCalendarNoteTime] = useState('09:00');
-  const [calendarReminderMorningTime, setCalendarReminderMorningTime] = useState('09:00');
-  const [calendarReminderSecondTime, setCalendarReminderSecondTime] = useState('17:30');
-  const [calendarFirstReminderEnabled, setCalendarFirstReminderEnabled] = useState(true);
-  const [calendarSecondReminderEnabled, setCalendarSecondReminderEnabled] = useState(true);
   const [reminderSettings, setReminderSettings] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || '{}');
       return {
         enabled: Boolean(saved?.enabled ?? false),
-        morningTime: String(saved?.morningTime || '09:00'),
+        morningReminderTime: String(saved?.morningReminderTime || saved?.morningTime || '09:00'),
         firstReminderEnabled: Boolean(saved?.firstReminderEnabled ?? true),
+        defaultReminderOffset: String(saved?.defaultReminderOffset || '1h'),
+        customReminderOffsetMinutes: Number(saved?.customReminderOffsetMinutes || 60),
+        quietHoursStart: String(saved?.quietHoursStart || '22:00'),
+        quietHoursEnd: String(saved?.quietHoursEnd || '07:00'),
         secondReminderTime: String(saved?.secondReminderTime || '17:30'),
-        secondReminderEnabled: Boolean(saved?.secondReminderEnabled ?? true)
+        secondReminderEnabled: Boolean(saved?.secondReminderEnabled ?? false)
       };
     } catch {
-      return { enabled: false, morningTime: '09:00', firstReminderEnabled: true, secondReminderTime: '17:30', secondReminderEnabled: true };
+      return {
+        enabled: false,
+        morningReminderTime: '09:00',
+        firstReminderEnabled: true,
+        defaultReminderOffset: '1h',
+        customReminderOffsetMinutes: 60,
+        quietHoursStart: '22:00',
+        quietHoursEnd: '07:00',
+        secondReminderTime: '20:00',
+        secondReminderEnabled: false
+      };
     }
   });
   const useAI = true;
@@ -1135,13 +1157,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(reminderSettings));
   }, [reminderSettings]);
-
-  useEffect(() => {
-    setCalendarReminderMorningTime(reminderSettings.morningTime || '09:00');
-    setCalendarFirstReminderEnabled(Boolean(reminderSettings.firstReminderEnabled ?? true));
-    setCalendarReminderSecondTime(reminderSettings.secondReminderTime || '17:30');
-    setCalendarSecondReminderEnabled(Boolean(reminderSettings.secondReminderEnabled ?? true));
-  }, [reminderSettings.morningTime, reminderSettings.firstReminderEnabled, reminderSettings.secondReminderTime, reminderSettings.secondReminderEnabled]);
 
   useEffect(() => {
     if (settingsOpen) setCalendarOpen(false);
@@ -1332,10 +1347,7 @@ export default function App() {
   }
 
   function applyCalendarReminderDefaults(note = null) {
-    setCalendarFirstReminderEnabled(Boolean(note?.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true));
-    setCalendarReminderMorningTime(note?.reminderMorningTime || reminderSettings.morningTime || '09:00');
-    setCalendarReminderSecondTime(note?.reminderSecondTime || reminderSettings.secondReminderTime || '17:30');
-    setCalendarSecondReminderEnabled(Boolean(note?.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true));
+    if (note?.time) setCalendarNoteTime(note.time);
   }
 
   function loadNoteIntoCalendar(note) {
@@ -1626,6 +1638,10 @@ export default function App() {
       eventAt: selectedDate.toISOString(),
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: timeValue,
+      reminderExplicitAt: '',
+      reminderUseMorningTime: false,
+      reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
+      reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
       reminderSecondTime: '',
       reminderSecondEnabled: false,
       actionLabel: appointmentMeta.action || '',
@@ -1635,10 +1651,6 @@ export default function App() {
     }));
     setCalendarNoteText(content);
     setCalendarNoteTime(timeValue);
-    setCalendarFirstReminderEnabled(Boolean(reminderSettings.enabled));
-    setCalendarReminderMorningTime(timeValue);
-    setCalendarReminderSecondTime('');
-    setCalendarSecondReminderEnabled(false);
   }
 
   function saveCalendarNote() {
@@ -1664,6 +1676,10 @@ export default function App() {
       appointmentMeta,
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: noteTime,
+      reminderExplicitAt: '',
+      reminderUseMorningTime: !parsedEvent.time && normalize(content).includes('утром'),
+      reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
+      reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
       reminderSecondEnabled: false,
       reminderSecondTime: ''
     });
@@ -1717,15 +1733,15 @@ export default function App() {
       appointmentMeta,
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: noteTime,
+      reminderExplicitAt: '',
+      reminderUseMorningTime: !allTimes[0] && normalize(text).includes('утром'),
+      reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
+      reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
       reminderSecondEnabled: false,
       reminderSecondTime: ''
     });
     setCalendarSelectedDate(new Date(targetDate).toISOString());
     setCalendarNoteTime(noteTime);
-    setCalendarFirstReminderEnabled(Boolean(reminderSettings.enabled));
-    setCalendarReminderMorningTime(noteTime);
-    setCalendarReminderSecondTime('');
-    setCalendarSecondReminderEnabled(false);
 
     if (!content) {
       if (sameDayNotes[0]) {
@@ -1733,6 +1749,10 @@ export default function App() {
           ...note,
           reminderFirstEnabled: Boolean(reminderSettings.enabled),
           reminderMorningTime: note.time || noteTime,
+          reminderExplicitAt: '',
+          reminderUseMorningTime: !allTimes[0] && normalize(text).includes('утром'),
+          reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
+          reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
           reminderSecondTime: '',
           reminderSecondEnabled: false,
           time: note.time || noteTime
@@ -1773,49 +1793,56 @@ export default function App() {
     const targetNote = selectedNote?.type === 'appointment' ? selectedNote : null;
     const reminderPlan = parseVoiceReminderVoiceSettings(text, {
       noteTime: targetNote?.time || calendarNoteTime || '09:00',
-      morningTime: targetNote?.reminderMorningTime || calendarReminderMorningTime || reminderSettings.morningTime || '09:00',
-      firstEnabled: targetNote?.reminderFirstEnabled ?? calendarFirstReminderEnabled ?? reminderSettings.firstReminderEnabled ?? true,
-      secondTime: targetNote?.reminderSecondTime || calendarReminderSecondTime || reminderSettings.secondReminderTime || '17:30',
-      secondEnabled: targetNote?.reminderSecondEnabled ?? calendarSecondReminderEnabled ?? reminderSettings.secondReminderEnabled ?? true
+      morningTime: targetNote?.reminderMorningTime || reminderSettings.morningReminderTime || '09:00',
+      firstEnabled: reminderSettings.enabled,
+      secondTime: reminderSettings.secondReminderTime || '20:00',
+      secondEnabled: reminderSettings.secondReminderEnabled ?? false
     });
+    const reminderTime = reminderPlan.noteTime || reminderPlan.morningTime || targetNote?.time || calendarNoteTime || '09:00';
 
-    setCalendarFirstReminderEnabled(reminderPlan.firstEnabled);
-    setCalendarReminderMorningTime(reminderPlan.morningTime || '09:00');
-    setCalendarReminderSecondTime(reminderPlan.secondTime || reminderSettings.secondReminderTime || '17:30');
-    setCalendarSecondReminderEnabled(reminderPlan.secondEnabled);
+    setCalendarNoteTime(reminderTime);
 
     if (targetNote) {
+      const targetEventAt = targetNote.eventAt ? new Date(targetNote.eventAt) : null;
+      const explicitReminderAt = targetEventAt && !Number.isNaN(targetEventAt.getTime())
+        ? (() => {
+            const at = new Date(targetEventAt);
+            const [hour, minute] = String(reminderTime).split(':').map(Number);
+            at.setHours(hour || 0, minute || 0, 0, 0);
+            return at.toISOString();
+          })()
+        : '';
       updateNoteById(targetNote.id, note => ({
         ...note,
-        reminderFirstEnabled: reminderPlan.firstEnabled,
-        reminderMorningTime: reminderPlan.morningTime || note.reminderMorningTime || '09:00',
-        reminderSecondTime: reminderPlan.secondEnabled ? (reminderPlan.secondTime || note.reminderSecondTime || reminderSettings.secondReminderTime || '17:30') : '',
-        reminderSecondEnabled: reminderPlan.secondEnabled
+        reminderFirstEnabled: Boolean(reminderSettings.enabled),
+        reminderMorningTime: reminderTime,
+        reminderExplicitAt: explicitReminderAt,
+        reminderUseMorningTime: !reminderPlan.noteTime && normalize(text).includes('утром'),
+        reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
+        reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
+        reminderSecondTime: reminderSettings.secondReminderEnabled ? (reminderSettings.secondReminderTime || '20:00') : '',
+        reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled)
       }));
       setCalendarOpen(true);
       setSettingsOpen(false);
-      const reminderSummary = buildReminderSummary(reminderPlan, voiceTimeToLabel);
-      setStatusVoice(`Напоминания обновлены: ${reminderSummary}.`, false);
+      setStatusVoice(`Уведомление обновлено: ${voiceTimeToLabel(reminderTime)}.`, false);
       return true;
     }
 
     if (calendarSelectedDate) {
       setCalendarOpen(true);
       setSettingsOpen(false);
-      const reminderSummary = buildReminderSummary(reminderPlan, voiceTimeToLabel);
-      setStatusVoice(`Для выбранной даты установлены напоминания: ${reminderSummary}.`, false);
+      setStatusVoice(`Для выбранной даты установлено уведомление: ${voiceTimeToLabel(reminderTime)}.`, false);
       return true;
     }
 
     setReminderSettings(prev => ({
       ...prev,
-      morningTime: reminderPlan.morningTime || prev.morningTime,
-      firstReminderEnabled: reminderPlan.firstEnabled,
-      secondReminderTime: reminderPlan.secondTime || prev.secondReminderTime,
-      secondReminderEnabled: reminderPlan.secondEnabled
+      morningReminderTime: normalize(text).includes('утром') ? reminderTime : prev.morningReminderTime,
+      secondReminderTime: prev.secondReminderTime,
+      secondReminderEnabled: prev.secondReminderEnabled
     }));
-    const reminderSummary = buildReminderSummary(reminderPlan, voiceTimeToLabel);
-    setStatusVoice(`Настройки напоминаний обновлены: ${reminderSummary}.`, false);
+    setStatusVoice(`Настройки уведомлений обновлены: ${voiceTimeToLabel(reminderTime)}.`, false);
     return true;
   }
 
@@ -1836,10 +1863,12 @@ export default function App() {
     const wantsUpdate = includesAny(source, ['измени', 'обнови', 'поменяй', 'исправь']);
 
     const reminderDefaults = {
-      morningTime: calendarReminderMorningTime || reminderSettings.morningTime || '09:00',
-      firstEnabled: calendarFirstReminderEnabled,
-      secondTime: calendarReminderSecondTime || reminderSettings.secondReminderTime || '17:30',
-      secondEnabled: calendarSecondReminderEnabled
+      morningTime: reminderSettings.morningReminderTime || '09:00',
+      firstEnabled: Boolean(reminderSettings.enabled),
+      secondTime: reminderSettings.secondReminderTime || '20:00',
+      secondEnabled: Boolean(reminderSettings.secondReminderEnabled),
+      offsetType: reminderSettings.defaultReminderOffset || '1h',
+      customOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60)
     };
 
     const selectedDate = new Date(calendarSelectedDate);
@@ -2336,6 +2365,46 @@ export default function App() {
             <label className="switch">
               <input type="checkbox" checked={Boolean(reminderSettings.enabled)} onChange={e => toggleRemindersEnabled(e.target.checked)} />
               <span className="slider" />
+            </label>
+          </div>
+          <div className="reminder-grid">
+            <label className="reminder-row">
+              <span>Напоминание по умолчанию</span>
+              <select value={reminderSettings.defaultReminderOffset} onChange={e => setReminderSettings(prev => ({ ...prev, defaultReminderOffset: e.target.value }))}>
+                <option value="15m">За 15 минут</option>
+                <option value="30m">За 30 минут</option>
+                <option value="1h">За 1 час</option>
+                <option value="1d">За 1 день</option>
+                <option value="custom">Своё</option>
+              </select>
+            </label>
+            {reminderSettings.defaultReminderOffset === 'custom' ? (
+              <label className="reminder-row">
+                <span>Своё значение, минут</span>
+                <input type="number" min="1" step="1" value={reminderSettings.customReminderOffsetMinutes} onChange={e => setReminderSettings(prev => ({ ...prev, customReminderOffsetMinutes: Number(e.target.value || 60) }))} />
+              </label>
+            ) : null}
+            <label className="reminder-row">
+              <span>Утром</span>
+              <input type="time" value={reminderSettings.morningReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, morningReminderTime: e.target.value || '09:00' }))} />
+            </label>
+            <label className="reminder-row">
+              <span>Тихие часы: начало</span>
+              <input type="time" value={reminderSettings.quietHoursStart} onChange={e => setReminderSettings(prev => ({ ...prev, quietHoursStart: e.target.value || '22:00' }))} />
+            </label>
+            <label className="reminder-row">
+              <span>Тихие часы: конец</span>
+              <input type="time" value={reminderSettings.quietHoursEnd} onChange={e => setReminderSettings(prev => ({ ...prev, quietHoursEnd: e.target.value || '07:00' }))} />
+            </label>
+            <label className="reminder-row">
+              <span>Второе уведомление</span>
+              <div className="reminder-input-row">
+                <input type="time" disabled={!reminderSettings.secondReminderEnabled} value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '20:00' }))} />
+                <label className="switch">
+                  <input type="checkbox" checked={Boolean(reminderSettings.secondReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderEnabled: e.target.checked }))} />
+                  <span className="slider" />
+                </label>
+              </div>
             </label>
           </div>
         </section>
