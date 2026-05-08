@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes } from './lib/notebookReminders';
+import { buildAppointmentNote, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes, supportsScheduledNotifications } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1182,6 +1182,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isNotificationSupported()) return undefined;
+    if (supportsScheduledNotifications()) return undefined;
     const timeouts = [];
     const emitReminder = (note, remindAt, label) => {
       const key = `${note.id}_${label}_${remindAt.toISOString()}`;
@@ -1246,6 +1247,48 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleResume);
     };
   }, [data.notes, reminderSettings, selectedVoiceStyle, selectedVoiceURI]);
+
+  useEffect(() => {
+    if (!isNotificationSupported()) return undefined;
+    if (!supportsScheduledNotifications()) return undefined;
+    if (!reminderSettings.enabled) return undefined;
+    if (Notification.permission !== 'granted') return undefined;
+
+    let cancelled = false;
+
+    (async () => {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration || cancelled) return;
+
+      const existing = await registration.getNotifications({ includeTriggered: true });
+      await Promise.all(existing
+        .filter(notification => String(notification.tag || '').startsWith('smart-voice-note:'))
+        .map(notification => notification.close()));
+
+      const notes = data.notes.filter(note => note.type === 'appointment' && note.eventAt);
+      for (const note of notes) {
+        const points = buildReminderPoints(note, reminderSettings);
+        for (const point of points) {
+          if (point.at.getTime() <= Date.now()) continue;
+          try {
+            await registration.showNotification(note.title || 'Напоминание', {
+              body: [note.dateLabel, note.time, note.placeLabel || note.content].filter(Boolean).join(' · '),
+              tag: `smart-voice-note:${note.id}:${point.label}`,
+              renotify: false,
+              data: { noteId: note.id, pointLabel: point.label },
+              showTrigger: new window.TimestampTrigger(point.at.getTime())
+            });
+          } catch {
+            // Fallback remains in the page-timer effect when triggers are unsupported.
+          }
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data.notes, reminderSettings]);
 
   const visibleNotes = useMemo(() => {
     let list = [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));

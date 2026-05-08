@@ -81,6 +81,14 @@ export function isNotificationSupported() {
   return typeof window !== 'undefined' && 'Notification' in window;
 }
 
+export function supportsScheduledNotifications() {
+  return typeof window !== 'undefined'
+    && 'Notification' in window
+    && 'showTrigger' in Notification.prototype
+    && 'serviceWorker' in navigator
+    && 'TimestampTrigger' in window;
+}
+
 export async function requestNotificationPermission() {
   if (!isNotificationSupported()) return 'unsupported';
   try {
