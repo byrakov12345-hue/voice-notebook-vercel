@@ -19,9 +19,16 @@ const REVERSE_MONTH_DATE_REGEX = new RegExp(`(?:^|\\s)${MONTH_TOKEN_PATTERN}\\s+
 export function extractAllTimes(text) {
   const source = normalizeVoiceText(text);
   const times = [];
-  const clockMatches = [...source.matchAll(/\b(\d{1,2})[:.](\d{2})\b/g)];
+  const clockMatches = [...source.matchAll(/\b(\d{1,2})[:.](\d{2})\b(?:\s+(утра|дня|вечера|ночи))?/g)];
   clockMatches.forEach(match => {
-    times.push(`${String(match[1]).padStart(2, '0')}:${match[2]}`);
+    const rawHour = Number(match[1]);
+    const minute = match[2];
+    const suffix = match[3];
+    let hour = rawHour;
+    if (suffix === 'вечера' && hour < 12) hour += 12;
+    else if (suffix === 'дня' && hour < 12) hour += 12;
+    else if (suffix === 'ночи' && hour === 12) hour = 0;
+    times.push(`${String(hour).padStart(2, '0')}:${minute}`);
   });
   const tokens = source.split(' ');
   for (let i = 0; i < tokens.length; i += 1) {

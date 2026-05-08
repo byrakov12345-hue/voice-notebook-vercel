@@ -110,8 +110,16 @@ function extractAppointmentTime(text) {
   const source = normalize(text);
   const tokens = source.split(' ');
 
-  const clock = source.match(/\b(\d{1,2})[:.](\d{2})\b/);
-  if (clock) return `${clock[1].padStart(2, '0')}:${clock[2]}`;
+  const clock = source.match(/\b(\d{1,2})[:.](\d{2})\b(?:\s+(утра|дня|вечера|ночи))?/);
+  if (clock) {
+    let hour = Number(clock[1]);
+    const minute = clock[2];
+    const suffix = clock[3];
+    if (suffix === 'вечера' && hour < 12) hour += 12;
+    else if (suffix === 'дня' && hour < 12) hour += 12;
+    else if (suffix === 'ночи' && hour === 12) hour = 0;
+    return `${String(hour).padStart(2, '0')}:${minute}`;
+  }
 
   for (let i = 0; i < tokens.length; i += 1) {
     const n = Number(tokens[i]);
@@ -220,9 +228,15 @@ function extractAppointmentMeta(text) {
 function extractAllTimes(text) {
   const source = normalize(text);
   const times = [];
-  const clockMatches = [...source.matchAll(/\b(\d{1,2})[:.](\d{2})\b/g)];
+  const clockMatches = [...source.matchAll(/\b(\d{1,2})[:.](\d{2})\b(?:\s+(утра|дня|вечера|ночи))?/g)];
   clockMatches.forEach(match => {
-    times.push(`${String(match[1]).padStart(2, '0')}:${match[2]}`);
+    let hour = Number(match[1]);
+    const minute = match[2];
+    const suffix = match[3];
+    if (suffix === 'вечера' && hour < 12) hour += 12;
+    else if (suffix === 'дня' && hour < 12) hour += 12;
+    else if (suffix === 'ночи' && hour === 12) hour = 0;
+    times.push(`${String(hour).padStart(2, '0')}:${minute}`);
   });
   const tokens = source.split(' ');
   for (let i = 0; i < tokens.length; i += 1) {
