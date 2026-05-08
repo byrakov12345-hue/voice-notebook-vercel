@@ -669,7 +669,7 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
     const items = extractItems(content);
     if (isTimedShoppingCommand(text)) {
       const eventMeta = parseVoiceAppointmentDateTime(text);
-      const timedReminder = eventMeta.time || reminderDefaults.morningTime || '09:00';
+      const timedReminder = eventMeta.time || '09:00';
       return {
         id: uid('note'),
         type: 'appointment',
@@ -680,7 +680,7 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
         dateLabel: eventMeta.dateLabel || formatCalendarDateLabel(new Date(eventMeta.eventAt || Date.now())),
         time: eventMeta.time || '09:00',
         eventAt: eventMeta.eventAt || new Date().toISOString(),
-        reminderFirstEnabled: true,
+        reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? false),
         reminderMorningTime: timedReminder,
         reminderSecondTime: '',
         reminderSecondEnabled: false,
@@ -713,10 +713,10 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
     return {
       id: uid('note'), type, folder, title, content,
       dateLabel: eventMeta.dateLabel, time: eventMeta.time, eventAt: eventMeta.eventAt,
-      reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? true),
-      reminderMorningTime: reminderDefaults.morningTime || '09:00',
-      reminderSecondTime: reminderDefaults.secondEnabled ? (reminderDefaults.secondTime || '17:30') : '',
-      reminderSecondEnabled: Boolean(reminderDefaults.secondEnabled),
+      reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? false),
+      reminderMorningTime: eventMeta.time || reminderDefaults.morningTime || '09:00',
+      reminderSecondTime: '',
+      reminderSecondEnabled: false,
       actionLabel: appointmentMeta.action, placeLabel: appointmentMeta.place, codeLabel: appointmentMeta.code,
       tags: ['встреча', eventMeta.dateLabel, eventMeta.time, appointmentMeta.place, appointmentMeta.code, ...tags].filter(Boolean), createdAt: now, updatedAt: now
     };
@@ -766,10 +766,10 @@ function createNoteFromAI(plan, fallbackText, preferredFolder = '', reminderDefa
       dateLabel: plan.dateLabel || eventMeta.dateLabel,
       time: plan.time || eventMeta.time,
       eventAt: plan.eventAt || eventMeta.eventAt,
-      reminderFirstEnabled: Boolean(plan.reminderFirstEnabled ?? reminderDefaults.firstEnabled ?? true),
-      reminderMorningTime: plan.reminderMorningTime || reminderDefaults.morningTime || '09:00',
-      reminderSecondTime: (plan.reminderSecondEnabled ?? reminderDefaults.secondEnabled) ? (plan.reminderSecondTime || reminderDefaults.secondTime || '17:30') : '',
-      reminderSecondEnabled: Boolean(plan.reminderSecondEnabled ?? reminderDefaults.secondEnabled),
+      reminderFirstEnabled: Boolean(plan.reminderFirstEnabled ?? reminderDefaults.firstEnabled ?? false),
+      reminderMorningTime: plan.time || eventMeta.time || plan.reminderMorningTime || reminderDefaults.morningTime || '09:00',
+      reminderSecondTime: '',
+      reminderSecondEnabled: false,
       actionLabel: plan.actionLabel || appointmentMeta.action,
       placeLabel: plan.placeLabel || appointmentMeta.place,
       codeLabel: plan.codeLabel || appointmentMeta.code,
@@ -1624,10 +1624,10 @@ export default function App() {
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: timeValue,
       eventAt: selectedDate.toISOString(),
-      reminderFirstEnabled: reminderPlan.firstEnabled,
-      reminderMorningTime: reminderPlan.morningTime,
-      reminderSecondTime: reminderPlan.secondEnabled ? reminderPlan.secondTime : '',
-      reminderSecondEnabled: reminderPlan.secondEnabled,
+      reminderFirstEnabled: Boolean(reminderSettings.enabled),
+      reminderMorningTime: timeValue,
+      reminderSecondTime: '',
+      reminderSecondEnabled: false,
       actionLabel: appointmentMeta.action || '',
       placeLabel: appointmentMeta.place || '',
       codeLabel: appointmentMeta.code || '',
@@ -1635,10 +1635,10 @@ export default function App() {
     }));
     setCalendarNoteText(content);
     setCalendarNoteTime(timeValue);
-    setCalendarFirstReminderEnabled(Boolean(reminderPlan.firstEnabled));
-    setCalendarReminderMorningTime(reminderPlan.morningTime);
-    setCalendarReminderSecondTime(reminderPlan.secondTime || reminderSettings.secondReminderTime || '17:30');
-    setCalendarSecondReminderEnabled(reminderPlan.secondEnabled);
+    setCalendarFirstReminderEnabled(Boolean(reminderSettings.enabled));
+    setCalendarReminderMorningTime(timeValue);
+    setCalendarReminderSecondTime('');
+    setCalendarSecondReminderEnabled(false);
   }
 
   function saveCalendarNote() {
@@ -1662,10 +1662,10 @@ export default function App() {
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: noteTime,
       appointmentMeta,
-      reminderFirstEnabled: calendarFirstReminderEnabled,
-      reminderMorningTime: calendarReminderMorningTime || noteTime || reminderSettings.morningTime || '09:00',
-      reminderSecondEnabled: calendarSecondReminderEnabled,
-      reminderSecondTime: calendarSecondReminderTime || reminderSettings.secondReminderTime || '17:30'
+      reminderFirstEnabled: Boolean(reminderSettings.enabled),
+      reminderMorningTime: noteTime,
+      reminderSecondEnabled: false,
+      reminderSecondTime: ''
     });
     setCalendarNoteTime(noteTime);
     const saved = saveNote(note, true);
@@ -1699,14 +1699,7 @@ export default function App() {
     const content = stripVoiceCalendarVoiceContent(text);
 
     const allTimes = extractVoiceAllTimes(text);
-    const reminderPlan = parseVoiceReminderVoiceSettings(text, {
-      noteTime: allTimes[0] || sameDayNotes[0]?.time || calendarNoteTime || '09:00',
-      morningTime: sameDayNotes[0]?.reminderMorningTime || reminderSettings.morningTime || '09:00',
-      firstEnabled: sameDayNotes[0]?.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true,
-      secondTime: sameDayNotes[0]?.reminderSecondTime || reminderSettings.secondReminderTime || '17:30',
-      secondEnabled: sameDayNotes[0]?.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true
-    });
-    const { noteTime, reminderOne, reminderTwo } = resolveReminderTimes(reminderPlan, reminderSettings, allTimes[0] || calendarNoteTime || '09:00');
+    const noteTime = allTimes[0] || sameDayNotes[0]?.time || calendarNoteTime || '09:00';
 
     const selectedDate = new Date(targetDate);
     const [hour, minute] = String(noteTime).split(':').map(Number);
@@ -1722,31 +1715,31 @@ export default function App() {
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: noteTime,
       appointmentMeta,
-      reminderFirstEnabled: reminderPlan.firstEnabled,
-      reminderMorningTime: reminderOne,
-      reminderSecondEnabled: reminderPlan.secondEnabled,
-      reminderSecondTime: reminderTwo
+      reminderFirstEnabled: Boolean(reminderSettings.enabled),
+      reminderMorningTime: noteTime,
+      reminderSecondEnabled: false,
+      reminderSecondTime: ''
     });
     setCalendarSelectedDate(new Date(targetDate).toISOString());
     setCalendarNoteTime(noteTime);
-    setCalendarFirstReminderEnabled(reminderPlan.firstEnabled);
-    setCalendarReminderMorningTime(reminderOne);
-    setCalendarReminderSecondTime(reminderTwo);
-    setCalendarSecondReminderEnabled(reminderPlan.secondEnabled);
+    setCalendarFirstReminderEnabled(Boolean(reminderSettings.enabled));
+    setCalendarReminderMorningTime(noteTime);
+    setCalendarReminderSecondTime('');
+    setCalendarSecondReminderEnabled(false);
 
     if (!content) {
       if (sameDayNotes[0]) {
         updateNoteById(sameDayNotes[0].id, note => ({
           ...note,
-          reminderFirstEnabled: reminderPlan.firstEnabled,
-          reminderMorningTime: reminderOne,
-          reminderSecondTime: reminderPlan.secondEnabled ? reminderTwo : '',
-          reminderSecondEnabled: reminderPlan.secondEnabled,
+          reminderFirstEnabled: Boolean(reminderSettings.enabled),
+          reminderMorningTime: note.time || noteTime,
+          reminderSecondTime: '',
+          reminderSecondEnabled: false,
           time: note.time || noteTime
         }));
-        setStatusVoice(buildReminderStatusMessage(`Для ${formatCalendarDateLabel(selectedDate)} обновлены напоминания: `, reminderPlan, voiceTimeToLabel, { morningTime: reminderOne, secondTime: reminderTwo }), false);
+        setStatusVoice(`Для ${formatCalendarDateLabel(selectedDate)} установлено уведомление на ${voiceTimeToLabel(noteTime)}.`, false);
       } else {
-        setStatusVoice(buildReminderStatusMessage(`Дата ${formatCalendarDateLabel(selectedDate)} открыта. Напоминания для новой записи: `, reminderPlan, voiceTimeToLabel, { morningTime: reminderOne, secondTime: reminderTwo }), false);
+        setStatusVoice(`Дата ${formatCalendarDateLabel(selectedDate)} открыта. Уведомление будет на ${voiceTimeToLabel(noteTime)}.`, false);
       }
       return true;
     }
@@ -1754,19 +1747,19 @@ export default function App() {
     const wantsUpdateExisting = includesAny(source, ['измени', 'обнови', 'поменяй', 'исправь']);
     if (wantsUpdateExisting && sameDayNotes[0]) {
       updateCalendarAppointmentNote(sameDayNotes[0].id, content, noteTime, {
-        firstEnabled: reminderPlan.firstEnabled,
-        morningTime: reminderOne,
-        secondTime: reminderTwo,
-        secondEnabled: reminderPlan.secondEnabled
+        firstEnabled: Boolean(reminderSettings.enabled),
+        morningTime: noteTime,
+        secondTime: '',
+        secondEnabled: false
       }, targetDate.toISOString());
-      setStatusVoice(buildReminderStatusMessage(`Запись на ${formatCalendarDateLabel(selectedDate)} обновлена. Напоминания: `, reminderPlan, voiceTimeToLabel, { morningTime: reminderOne, secondTime: reminderTwo }), false);
+      setStatusVoice(`Запись на ${formatCalendarDateLabel(selectedDate)} обновлена. Уведомление на ${voiceTimeToLabel(noteTime)}.`, false);
       return true;
     }
 
     setCalendarNoteText('');
     const saved = saveNote(note, true);
     if (saved) {
-      setStatusVoice(buildReminderStatusMessage(`Сохранено на ${formatCalendarDateLabel(selectedDate)}. Напоминания: `, reminderPlan, voiceTimeToLabel, { morningTime: reminderOne, secondTime: reminderTwo }), false);
+      setStatusVoice(`Сохранено на ${formatCalendarDateLabel(selectedDate)}. Уведомление на ${voiceTimeToLabel(noteTime)}.`, false);
     }
     return true;
   }
@@ -2345,28 +2338,6 @@ export default function App() {
               <span className="slider" />
             </label>
           </div>
-          <div className="reminder-grid">
-            <label className="reminder-row">
-              <span>Утреннее напоминание</span>
-              <div className="reminder-input-row">
-                <input type="time" disabled={!reminderSettings.firstReminderEnabled} value={reminderSettings.morningTime} onChange={e => setReminderSettings(prev => ({ ...prev, morningTime: e.target.value || '09:00' }))} />
-                <label className="switch">
-                  <input type="checkbox" checked={Boolean(reminderSettings.firstReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, firstReminderEnabled: e.target.checked }))} />
-                  <span className="slider" />
-                </label>
-              </div>
-            </label>
-            <label className="reminder-row">
-              <span>Второе напоминание</span>
-              <div className="reminder-input-row">
-                <input type="time" disabled={!reminderSettings.secondReminderEnabled} value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '17:30' }))} />
-                <label className="switch">
-                  <input type="checkbox" checked={Boolean(reminderSettings.secondReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderEnabled: e.target.checked }))} />
-                  <span className="slider" />
-                </label>
-              </div>
-            </label>
-          </div>
         </section>
       ) : null}
 
@@ -2380,22 +2351,6 @@ export default function App() {
             <div className="calendar-compose-row calendar-compose-main">
               <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на выбранную дату" />
               <button className="primary" onClick={saveCalendarNote}>Сохранить</button>
-            </div>
-            <div className="calendar-reminder-stack">
-              <div className="calendar-reminder-item">
-                <input type="time" disabled={!calendarFirstReminderEnabled} value={calendarReminderMorningTime} onChange={e => setCalendarReminderMorningTime(e.target.value || '09:00')} />
-                <label className="switch">
-                  <input type="checkbox" checked={Boolean(calendarFirstReminderEnabled)} onChange={e => setCalendarFirstReminderEnabled(e.target.checked)} />
-                  <span className="slider" />
-                </label>
-              </div>
-              <div className="calendar-reminder-item">
-                <input type="time" disabled={!calendarSecondReminderEnabled} value={calendarReminderSecondTime} onChange={e => setCalendarReminderSecondTime(e.target.value || '17:30')} />
-                <label className="switch">
-                  <input type="checkbox" checked={Boolean(calendarSecondReminderEnabled)} onChange={e => setCalendarSecondReminderEnabled(e.target.checked)} />
-                  <span className="slider" />
-                </label>
-              </div>
             </div>
           </div>
           <div className="calendar-list">

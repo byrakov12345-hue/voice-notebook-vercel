@@ -69,7 +69,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   scroll-padding-inline: 4px;
   padding: 4px 4px 10px;
   overscroll-behavior-x: contain;
-  touch-action: pan-x pinch-zoom;
+  touch-action: auto;
   -webkit-overflow-scrolling: touch;
   align-items: start;
 }

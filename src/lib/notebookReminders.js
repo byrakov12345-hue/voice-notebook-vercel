@@ -2,27 +2,9 @@ export function buildReminderPoints(note, reminderSettings = {}) {
   if (!note || note.type !== 'appointment' || !note.eventAt) return [];
   const eventAt = new Date(note.eventAt);
   if (Number.isNaN(eventAt.getTime())) return [];
-
-  const points = [{ at: eventAt, label: 'event' }];
-
   const firstEnabled = note.reminderFirstEnabled ?? reminderSettings.firstReminderEnabled ?? true;
-  if (firstEnabled) {
-    const morningAt = new Date(eventAt);
-    const [morningHour, morningMinute] = String(note.reminderMorningTime || reminderSettings.morningTime || '09:00').split(':').map(Number);
-    morningAt.setHours(morningHour || 0, morningMinute || 0, 0, 0);
-    points.push({ at: morningAt, label: 'morning' });
-  }
-
-  const secondEnabled = note.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? true;
-  const secondValue = note.reminderSecondTime || reminderSettings.secondReminderTime || '';
-  if (secondEnabled && secondValue) {
-    const secondAt = new Date(eventAt);
-    const [secondHour, secondMinute] = String(secondValue).split(':').map(Number);
-    secondAt.setHours(secondHour || 0, secondMinute || 0, 0, 0);
-    points.push({ at: secondAt, label: 'before' });
-  }
-
-  return points;
+  if (!firstEnabled) return [];
+  return [{ at: eventAt, label: 'event' }];
 }
 
 export function isNotificationSupported() {
@@ -56,9 +38,7 @@ export async function enableReminderNotifications(nextValue) {
 }
 
 export function buildReminderSummary(reminderPlan, toLabel) {
-  return reminderPlan.secondEnabled
-    ? `${reminderPlan.firstEnabled ? toLabel(reminderPlan.morningTime) : '1-е выкл.'} и ${toLabel(reminderPlan.secondTime)}`
-    : (reminderPlan.firstEnabled ? toLabel(reminderPlan.morningTime) : 'оба напоминания выключены');
+  return reminderPlan.firstEnabled ? toLabel(reminderPlan.morningTime || reminderPlan.noteTime || '') : 'уведомление выключено';
 }
 
 export function buildAppointmentNote({
@@ -101,17 +81,18 @@ export function buildAppointmentNote({
 export function buildReminderDefaults(reminderSettings = {}) {
   return {
     morningTime: reminderSettings.morningTime || '09:00',
-    firstEnabled: reminderSettings.firstReminderEnabled ?? true,
-    secondTime: reminderSettings.secondReminderTime || '17:30',
-    secondEnabled: reminderSettings.secondReminderEnabled ?? true
+    firstEnabled: reminderSettings.enabled ?? false,
+    secondTime: '',
+    secondEnabled: false
   };
 }
 
 export function resolveReminderTimes(reminderPlan, reminderSettings = {}, noteTimeFallback = '09:00') {
+  const noteTime = reminderPlan.noteTime || noteTimeFallback || '09:00';
   return {
-    noteTime: reminderPlan.noteTime || noteTimeFallback || '09:00',
-    reminderOne: reminderPlan.morningTime || reminderSettings.morningTime || '09:00',
-    reminderTwo: reminderPlan.secondTime || reminderSettings.secondReminderTime || '17:30'
+    noteTime,
+    reminderOne: noteTime,
+    reminderTwo: ''
   };
 }
 
