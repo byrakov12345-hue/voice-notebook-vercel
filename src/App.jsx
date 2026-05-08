@@ -1646,7 +1646,9 @@ export default function App() {
     const content = String(calendarNoteText || '').trim();
     if (!content) return setStatusVoice('Введите заметку для выбранной даты.', false);
     const selectedDate = new Date(calendarSelectedDate);
-    const [hour, minute] = String(calendarNoteTime || '09:00').split(':').map(Number);
+    const parsedEvent = parseVoiceAppointmentDateTime(content);
+    const noteTime = parsedEvent.time || String(calendarNoteTime || '09:00');
+    const [hour, minute] = noteTime.split(':').map(Number);
     selectedDate.setHours(hour || 0, minute || 0, 0, 0);
     const type = inferType(content);
     const folder = resolveFolderName(content, type === 'note' ? 'appointment' : type);
@@ -1658,13 +1660,14 @@ export default function App() {
       title: cleanTitle(content, 'Напоминание'),
       content,
       dateLabel: formatCalendarDateLabel(selectedDate),
-      time: String(calendarNoteTime || '09:00'),
+      time: noteTime,
       appointmentMeta,
       reminderFirstEnabled: calendarFirstReminderEnabled,
-      reminderMorningTime: calendarReminderMorningTime || reminderSettings.morningTime || '09:00',
+      reminderMorningTime: calendarReminderMorningTime || noteTime || reminderSettings.morningTime || '09:00',
       reminderSecondEnabled: calendarSecondReminderEnabled,
       reminderSecondTime: calendarSecondReminderTime || reminderSettings.secondReminderTime || '17:30'
     });
+    setCalendarNoteTime(noteTime);
     const saved = saveNote(note, true);
     if (saved) setCalendarNoteText('');
   }
@@ -2374,20 +2377,8 @@ export default function App() {
             <button onClick={() => setCalendarOpen(false)}>Закрыть</button>
           </div>
           <div className="calendar-compose">
-            <div className="calendar-selected">
-              {calendarSelectedDate ? `Выбрано: ${formatCalendarDateLabel(new Date(calendarSelectedDate))}` : 'Выберите число'}
-            </div>
-            <div className="calendar-compose-row">
-              <select value={calendarDayPicker.selectedDay} onChange={e => selectCalendarDayFromPicker(e.target.value)}>
-                {calendarDayPicker.options.map(day => (
-                  <option key={day} value={day}>{day}</option>
-                ))}
-              </select>
-              <input type="time" value={calendarNoteTime} onChange={e => setCalendarNoteTime(e.target.value || '09:00')} />
-              <div className="calendar-reminder-label">Число и время</div>
-            </div>
             <div className="calendar-compose-row calendar-compose-main">
-              <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на эту дату" />
+              <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на выбранную дату" />
               <button className="primary" onClick={saveCalendarNote}>Сохранить</button>
             </div>
             <div className="calendar-reminder-stack">
