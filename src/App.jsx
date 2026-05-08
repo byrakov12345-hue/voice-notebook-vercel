@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes, showReminderNotification, supportsScheduledNotifications } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1245,6 +1245,27 @@ export default function App() {
   }, [data.notes, reminderSettings, selectedVoiceStyle, selectedVoiceURI]);
 
   useEffect(() => {
+    if (!reminderSettings.enabled || !isNotificationSupported() || Notification.permission !== 'granted') return undefined;
+    let cancelled = false;
+    const sync = async () => {
+      if (cancelled) return;
+      await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
+    };
+    sync();
+    const intervalId = window.setInterval(sync, 60000);
+    window.addEventListener('focus', sync);
+    window.addEventListener('pageshow', sync);
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', sync);
+      window.removeEventListener('pageshow', sync);
+      document.removeEventListener('visibilitychange', sync);
+    };
+  }, [data.notes, reminderSettings]);
+
+  useEffect(() => {
     if (!isNotificationSupported()) return undefined;
     if (!supportsScheduledNotifications()) return undefined;
     if (!reminderSettings.enabled) return undefined;
@@ -1961,8 +1982,12 @@ export default function App() {
       return;
     }
     const result = await requestNotificationPermission();
-    if (result === 'granted') setStatusVoice('Уведомления разрешены.', false);
-    else setStatusVoice('Разрешение на уведомления не выдано.', false);
+    if (result === 'granted') {
+      await showServiceWorkerTestNotification();
+      setStatusVoice('Уведомления разрешены. Проверка отправлена в шторку.', false);
+    } else {
+      setStatusVoice('Разрешение на уведомления не выдано.', false);
+    }
   }
 
   async function toggleRemindersEnabled(nextValue) {
@@ -1972,9 +1997,14 @@ export default function App() {
       return;
     }
     setReminderSettings(prev => ({ ...prev, enabled: Boolean(result.enabled) }));
-    if (result.status === 'disabled') return setStatusVoice('Напоминания выключены.', false);
+    if (result.status === 'disabled') {
+      await syncServiceWorkerReminderSchedule([], { ...reminderSettings, enabled: false });
+      return setStatusVoice('Напоминания выключены.', false);
+    }
     if (result.status !== 'granted') return setStatusVoice('Разрешение на уведомления не выдано.', false);
-    setStatusVoice('Напоминания включены.', false);
+    await showServiceWorkerTestNotification();
+    await syncServiceWorkerReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
+    setStatusVoice('Напоминания включены. Проверка отправлена в шторку.', false);
   }
 
   async function shareNote(note) {

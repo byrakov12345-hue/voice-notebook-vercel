@@ -124,6 +124,68 @@ export async function showReminderNotification(note, pointLabel = 'primary') {
   }
 }
 
+export async function syncServiceWorkerReminderSchedule(notes = [], reminderSettings = {}) {
+  if (
+    typeof window === 'undefined' ||
+    !('serviceWorker' in navigator) ||
+    !isNotificationSupported() ||
+    Notification.permission !== 'granted'
+  ) {
+    return false;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const target = navigator.serviceWorker.controller || registration.active || registration.waiting || registration.installing;
+    if (!target?.postMessage) return false;
+
+    const reminders = [];
+    notes
+      .filter(note => note?.type === 'appointment' && note.eventAt)
+      .forEach(note => {
+        buildReminderPoints(note, reminderSettings)
+          .filter(point => point.at.getTime() > Date.now())
+          .forEach(point => {
+            const options = buildNotificationOptions(note, point.label);
+            reminders.push({
+              key: options.tag,
+              at: point.at.getTime(),
+              title: note.title || 'Напоминание',
+              noteId: note.id,
+              label: point.label,
+              options
+            });
+          });
+      });
+
+    target.postMessage({ type: 'smart-notebook-sync-reminders', reminders });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function showServiceWorkerTestNotification() {
+  if (
+    typeof window === 'undefined' ||
+    !('serviceWorker' in navigator) ||
+    !isNotificationSupported() ||
+    Notification.permission !== 'granted'
+  ) {
+    return false;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const target = navigator.serviceWorker.controller || registration.active || registration.waiting || registration.installing;
+    if (!target?.postMessage) return false;
+    target.postMessage({ type: 'smart-notebook-test-notification' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function requestNotificationPermission() {
   if (!isNotificationSupported()) return 'unsupported';
   try {
