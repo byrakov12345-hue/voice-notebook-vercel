@@ -682,7 +682,7 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
         eventAt: eventMeta.eventAt || new Date().toISOString(),
         reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? false),
         reminderMorningTime: timedReminder,
-        reminderExplicitAt: eventMeta.eventAt || '',
+        reminderExplicitAt: eventMeta.time ? (eventMeta.eventAt || '') : '',
         reminderUseMorningTime: false,
         reminderOffsetType: reminderDefaults.offsetType || '1h',
         reminderCustomOffsetMinutes: reminderDefaults.customOffsetMinutes || 60,
@@ -719,7 +719,7 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
       dateLabel: eventMeta.dateLabel, time: eventMeta.time, eventAt: eventMeta.eventAt,
       reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? false),
       reminderMorningTime: eventMeta.time || reminderDefaults.morningTime || '09:00',
-      reminderExplicitAt: '',
+      reminderExplicitAt: eventMeta.time ? (eventMeta.eventAt || '') : '',
       reminderUseMorningTime: !eventMeta.time && normalize(text).includes('утром'),
       reminderOffsetType: reminderDefaults.offsetType || '1h',
       reminderCustomOffsetMinutes: reminderDefaults.customOffsetMinutes || 60,
@@ -776,7 +776,7 @@ function createNoteFromAI(plan, fallbackText, preferredFolder = '', reminderDefa
       eventAt: plan.eventAt || eventMeta.eventAt,
       reminderFirstEnabled: Boolean(plan.reminderFirstEnabled ?? reminderDefaults.firstEnabled ?? false),
       reminderMorningTime: plan.time || eventMeta.time || plan.reminderMorningTime || reminderDefaults.morningTime || '09:00',
-      reminderExplicitAt: plan.reminderExplicitAt || '',
+      reminderExplicitAt: plan.reminderExplicitAt || ((plan.time || eventMeta.time) ? (plan.eventAt || eventMeta.eventAt || '') : ''),
       reminderUseMorningTime: Boolean(plan.reminderUseMorningTime ?? false),
       reminderOffsetType: plan.reminderOffsetType || reminderDefaults.offsetType || '1h',
       reminderCustomOffsetMinutes: Number(plan.reminderCustomOffsetMinutes || reminderDefaults.customOffsetMinutes || 60),
@@ -1836,11 +1836,12 @@ export default function App() {
       return true;
     }
 
+    const touchesSecondReminder = includesAny(source, ['второе напоминание', '2-е напоминание', 'второй уведомление', 'без второго напоминания', 'отключи второе напоминание', 'убери второе напоминание']);
     setReminderSettings(prev => ({
       ...prev,
       morningReminderTime: normalize(text).includes('утром') ? reminderTime : prev.morningReminderTime,
-      secondReminderTime: prev.secondReminderTime,
-      secondReminderEnabled: prev.secondReminderEnabled
+      secondReminderTime: reminderPlan.secondEnabled && reminderPlan.secondTime ? reminderPlan.secondTime : prev.secondReminderTime,
+      secondReminderEnabled: touchesSecondReminder ? Boolean(reminderPlan.secondEnabled) : prev.secondReminderEnabled
     }));
     setStatusVoice(`Настройки уведомлений обновлены: ${voiceTimeToLabel(reminderTime)}.`, false);
     return true;
