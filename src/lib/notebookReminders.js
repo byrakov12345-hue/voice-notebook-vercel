@@ -150,12 +150,14 @@ export function buildReminderPoints(note, reminderSettings = {}) {
 
   const secondEnabled = note.reminderSecondEnabled ?? reminderSettings.secondReminderEnabled ?? false;
   if (secondEnabled) {
-    const secondAt = new Date(primaryAt);
-    const [hour, minute] = parseTimeParts(reminderSettings.secondReminderTime || '20:00', 20, 0);
+    const secondAt = new Date(eventAt);
+    const [hour, minute] = parseTimeParts(note.reminderSecondTime || reminderSettings.secondReminderTime || '20:00', 20, 0);
     secondAt.setHours(hour, minute, 0, 0);
-    points.push({ at: secondAt, label: 'secondary' });
+    if (!Number.isNaN(secondAt.getTime()) && secondAt.getTime() !== primaryAt.getTime()) {
+      points.push({ at: secondAt, label: 'secondary' });
+    }
   }
-  return points;
+  return points.sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
 export function isNotificationSupported() {
@@ -510,6 +512,10 @@ export function buildAppointmentNote({
   appointmentMeta,
   reminderFirstEnabled,
   reminderMorningTime,
+  reminderExplicitAt = '',
+  reminderUseMorningTime = false,
+  reminderOffsetType = '1h',
+  reminderCustomOffsetMinutes = 60,
   reminderSecondEnabled,
   reminderSecondTime
 }) {
@@ -525,6 +531,10 @@ export function buildAppointmentNote({
     eventAt: selectedDate.toISOString(),
     reminderFirstEnabled,
     reminderMorningTime,
+    reminderExplicitAt,
+    reminderUseMorningTime,
+    reminderOffsetType,
+    reminderCustomOffsetMinutes: Number(reminderCustomOffsetMinutes || 60),
     reminderSecondTime: reminderSecondEnabled ? reminderSecondTime : '',
     reminderSecondEnabled,
     actionLabel: appointmentMeta.action || '',

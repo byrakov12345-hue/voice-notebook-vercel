@@ -1,0 +1,20 @@
+{
+  "name": "АИ Блокнот будущего",
+  "short_name": "АИ Блокнот",
+  "description": "Голосовой AI-блокнот с папками, календарём и уведомлениями.",
+  "lang": "ru-RU",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

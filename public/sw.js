@@ -264,16 +264,18 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil((async () => {
+    const noteId = event.notification?.data?.noteId || null;
     const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (allClients.length) {
       const client = allClients[0];
-      client.focus();
+      await client.focus();
       client.postMessage({
         type: 'open-note-from-notification',
-        noteId: event.notification?.data?.noteId || null
+        noteId
       });
       return;
     }
-    await self.clients.openWindow('/');
+    const targetUrl = noteId ? `/?openNote=${encodeURIComponent(noteId)}` : '/';
+    await self.clients.openWindow(targetUrl);
   })());
 });

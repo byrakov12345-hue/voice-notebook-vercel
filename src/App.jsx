@@ -462,6 +462,22 @@ function resolveExplicitFolderName(rawName) {
     здоровье: 'Здоровье',
     учеба: 'Учёба',
     учёба: 'Учёба',
+    финансы: 'Финансы',
+    финансыи: 'Финансы',
+    банк: 'Финансы',
+    документы: 'Документы',
+    документ: 'Документы',
+    путешествия: 'Путешествия',
+    поездка: 'Путешествия',
+    поездки: 'Путешествия',
+    рецепт: 'Рецепты',
+    рецепты: 'Рецепты',
+    спорт: 'Спорт',
+    тренировки: 'Спорт',
+    животные: 'Животные',
+    питомец: 'Животные',
+    питомцы: 'Животные',
+    личное: 'Личное',
     идея: 'Идеи',
     идеи: 'Идеи',
     разное: 'Разное'
@@ -587,6 +603,13 @@ function chooseFolder(text) {
   if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'Идеи';
   if (isFamilyContext(source)) return 'Семья';
   if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'Расходы';
+  if (includesAny(source, ['финанс', 'банк', 'карта', 'счет', 'счёт', 'платеж', 'платёж', 'кредит', 'ипотека'])) return 'Финансы';
+  if (includesAny(source, ['документ', 'паспорт', 'права', 'договор', 'полис', 'справка'])) return 'Документы';
+  if (includesAny(source, ['поездка', 'путешествие', 'билет', 'отель', 'аэропорт', 'виза'])) return 'Путешествия';
+  if (includesAny(source, ['рецепт', 'готовить', 'ингредиенты', 'блюдо'])) return 'Рецепты';
+  if (includesAny(source, ['спорт', 'тренировка', 'зал', 'фитнес', 'пробежка'])) return 'Спорт';
+  if (includesAny(source, ['кот', 'кошка', 'собака', 'питомец', 'ветеринар'])) return 'Животные';
+  if (includesAny(source, ['личное', 'дневник', 'настроение', 'привычка'])) return 'Личное';
   const scoredFolder = scoreFolderSignals(source);
   if (scoredFolder) return scoredFolder;
   if (includesAny(source, ['стриж', 'встреч', 'встрет', 'прием', 'приём', 'барбер', 'парикмахер', 'договорились']) || hasDateOrTime(source)) return 'Встречи';
@@ -838,7 +861,7 @@ function detectIntent(text) {
   if (includesAny(source, ['что я записывал сегодня', 'покажи вчерашние записи', 'что я сохранял на этой неделе', 'за вчера', 'за сегодня', 'на этой неделе'])) return 'history';
   if (includesAny(source, ['найди', 'найти', 'поищи', 'поиск', 'что я записывал'])) return 'search';
   if (includesAny(source, ['создай папку', 'создать папку'])) return 'create_folder';
-  if (includesAny(source, ['запомни', 'запиши', 'сохрани', 'добавь', 'нужно запомнить', 'надо запомнить'])) return 'save';
+  if (includesAny(source, ['запомни', 'запиши', 'сохрани', 'добавь', 'напомни', 'напомнить', 'поставь напоминание', 'поставь уведомление', 'создай напоминание', 'оставь напоминание', 'запланируй', 'нужно запомнить', 'надо запомнить'])) return 'save';
   if (includesAny(source, ['у меня идея', 'есть идея'])) return 'save';
   if (includesAny(source, ['мне нужно', 'мне надо', 'надо', 'нужно', 'хочу'])) return 'save';
   if (inferType(text) !== 'note') return 'save';
@@ -1093,7 +1116,7 @@ export default function App() {
   const [selectedVoiceStyle, setSelectedVoiceStyle] = useState('default');
   const [historyFilter, setHistoryFilter] = useState('all');
   const [quickDateFilter, setQuickDateFilter] = useState('');
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(true);
   const [calendarSelectedDate, setCalendarSelectedDate] = useState('');
   const [calendarDayPanelOpen, setCalendarDayPanelOpen] = useState(false);
   const [calendarDayFilter, setCalendarDayFilter] = useState('');
@@ -1188,13 +1211,6 @@ export default function App() {
     localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(reminderSettings));
   }, [reminderSettings]);
 
-  useEffect(() => {
-    if (settingsOpen) setCalendarOpen(false);
-  }, [settingsOpen]);
-
-  useEffect(() => {
-    if (calendarOpen) setSettingsOpen(false);
-  }, [calendarOpen]);
 
   useEffect(() => {
     if (!isNotificationSupported()) return undefined;
@@ -1330,6 +1346,35 @@ export default function App() {
       cancelled = true;
     };
   }, [data.notes, reminderSettings]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const openNoteById = noteId => {
+      if (!noteId) return false;
+      const note = data.notes.find(item => item.id === noteId);
+      if (!note) return false;
+      openNote(note);
+      return true;
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    const noteIdFromUrl = params.get('openNote') || params.get('noteId');
+    if (noteIdFromUrl && openNoteById(noteIdFromUrl)) {
+      params.delete('openNote');
+      params.delete('noteId');
+      const nextQuery = params.toString();
+      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', nextUrl);
+    }
+
+    if (!('serviceWorker' in navigator)) return undefined;
+    const handleWorkerMessage = event => {
+      if (event.data?.type !== 'open-note-from-notification') return;
+      openNoteById(event.data?.noteId);
+    };
+    navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleWorkerMessage);
+  }, [data.notes]);
 
   const visibleNotes = useMemo(() => {
     let list = [...data.notes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -1775,12 +1820,15 @@ export default function App() {
     return findCalendarContextNoteByDate(data.notes, selectedNote, dateIso);
   }
 
-  function updateCalendarAppointmentNote(noteId, content, timeValue, reminderPlan, dateIso) {
+  function updateCalendarAppointmentNote(noteId, content, timeValue, reminderPlan = {}, dateIso) {
     const selectedDate = new Date(dateIso);
     const [hour, minute] = String(timeValue || '09:00').split(':').map(Number);
     selectedDate.setHours(hour || 0, minute || 0, 0, 0);
     const appointmentMeta = extractAppointmentMeta(content);
     const folder = resolveFolderName(content, 'appointment');
+    const firstEnabled = Boolean(reminderPlan.firstEnabled ?? reminderSettings.enabled);
+    const secondEnabled = Boolean(reminderPlan.secondEnabled ?? reminderSettings.secondReminderEnabled);
+    const secondTime = secondEnabled ? (reminderPlan.secondTime || reminderSettings.secondReminderTime || '20:00') : '';
     updateNoteById(noteId, note => ({
       ...note,
       folder,
@@ -1789,18 +1837,19 @@ export default function App() {
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: timeValue,
       eventAt: selectedDate.toISOString(),
-      reminderFirstEnabled: Boolean(reminderSettings.enabled),
-      reminderMorningTime: timeValue,
-      reminderExplicitAt: '',
-      reminderUseMorningTime: false,
-      reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
-      reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
-      reminderSecondTime: '',
-      reminderSecondEnabled: false,
+      reminderFirstEnabled: firstEnabled,
+      reminderMorningTime: reminderPlan.morningTime || timeValue,
+      reminderExplicitAt: selectedDate.toISOString(),
+      reminderUseMorningTime: Boolean(reminderPlan.useMorningTime ?? false),
+      reminderOffsetType: reminderPlan.offsetType || reminderSettings.defaultReminderOffset || '1h',
+      reminderCustomOffsetMinutes: Number(reminderPlan.customOffsetMinutes || reminderSettings.customReminderOffsetMinutes || 60),
+      reminderSecondTime: secondTime,
+      reminderSecondEnabled: secondEnabled,
       actionLabel: appointmentMeta.action || '',
       placeLabel: appointmentMeta.place || '',
       codeLabel: appointmentMeta.code || '',
-      tags: ['встреча', formatCalendarDateLabel(selectedDate), timeValue].filter(Boolean)
+      tags: ['встреча', formatCalendarDateLabel(selectedDate), timeValue].filter(Boolean),
+      updatedAt: new Date().toISOString()
     }));
     setCalendarNoteText(content);
     setCalendarNoteTime(timeValue);
@@ -1898,12 +1947,12 @@ export default function App() {
       appointmentMeta,
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: noteTime,
-      reminderExplicitAt: '',
+      reminderExplicitAt: selectedDate.toISOString(),
       reminderUseMorningTime: !parsedEvent.time && normalize(content).includes('утром'),
       reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
       reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
-      reminderSecondEnabled: false,
-      reminderSecondTime: ''
+      reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled),
+      reminderSecondTime: reminderSettings.secondReminderEnabled ? (reminderSettings.secondReminderTime || '20:00') : ''
     });
     setCalendarNoteTime(noteTime);
     const saved = saveNote(note, true);
@@ -1962,12 +2011,12 @@ export default function App() {
       appointmentMeta,
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: noteTime,
-      reminderExplicitAt: '',
+      reminderExplicitAt: selectedDate.toISOString(),
       reminderUseMorningTime: !parsedEvent.time && normalize(content).includes('утром'),
       reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
       reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
-      reminderSecondEnabled: false,
-      reminderSecondTime: ''
+      reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled),
+      reminderSecondTime: reminderSettings.secondReminderEnabled ? (reminderSettings.secondReminderTime || '20:00') : ''
     });
     setCalendarDayPanelOpen(true);
     setCalendarDayFilter('');
@@ -2022,12 +2071,12 @@ export default function App() {
       appointmentMeta,
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: noteTime,
-      reminderExplicitAt: '',
+      reminderExplicitAt: selectedDate.toISOString(),
       reminderUseMorningTime: !allTimes[0] && normalize(text).includes('утром'),
       reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
       reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
-      reminderSecondEnabled: false,
-      reminderSecondTime: ''
+      reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled),
+      reminderSecondTime: reminderSettings.secondReminderEnabled ? (reminderSettings.secondReminderTime || '20:00') : ''
     });
     setCalendarSelectedDate(new Date(targetDate).toISOString());
     setCalendarNoteTime(noteTime);
@@ -2038,12 +2087,12 @@ export default function App() {
           ...note,
           reminderFirstEnabled: Boolean(reminderSettings.enabled),
           reminderMorningTime: note.time || noteTime,
-          reminderExplicitAt: '',
+          reminderExplicitAt: selectedDate.toISOString(),
           reminderUseMorningTime: !allTimes[0] && normalize(text).includes('утром'),
           reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
           reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
-          reminderSecondTime: '',
-          reminderSecondEnabled: false,
+          reminderSecondTime: reminderSettings.secondReminderEnabled ? (reminderSettings.secondReminderTime || '20:00') : '',
+          reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled),
           time: note.time || noteTime
         }));
         setStatusVoice(`Для ${formatCalendarDateLabel(selectedDate)} установлено уведомление на ${voiceTimeToLabel(noteTime)}.`, false);
@@ -2079,7 +2128,8 @@ export default function App() {
     if (parseVoiceCalendarTargetDate(text) && (inferType(text) === 'appointment' || includesAny(source, ['запиши', 'запомни', 'сохрани', 'мне ']))) {
       return false;
     }
-    const targetNote = selectedNote?.type === 'appointment' ? selectedNote : null;
+    const contextNote = selectedNote?.type === 'appointment' ? selectedNote : findCalendarContextNote(calendarSelectedDate);
+    const targetNote = contextNote?.type === 'appointment' ? contextNote : null;
     const reminderPlan = parseVoiceReminderVoiceSettings(text, {
       noteTime: targetNote?.time || calendarNoteTime || '09:00',
       morningTime: targetNote?.reminderMorningTime || reminderSettings.morningReminderTime || '09:00',
@@ -2109,8 +2159,8 @@ export default function App() {
         reminderUseMorningTime: !reminderPlan.noteTime && normalize(text).includes('утром'),
         reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
         reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
-        reminderSecondTime: reminderSettings.secondReminderEnabled ? (reminderSettings.secondReminderTime || '20:00') : '',
-        reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled)
+        reminderSecondTime: reminderPlan.secondEnabled ? (reminderPlan.secondTime || note.reminderSecondTime || reminderSettings.secondReminderTime || '20:00') : '',
+        reminderSecondEnabled: Boolean(reminderPlan.secondEnabled)
       }));
       setCalendarOpen(true);
       setSettingsOpen(false);
@@ -2119,6 +2169,26 @@ export default function App() {
     }
 
     if (calendarSelectedDate) {
+      const contextNoteForDate = findCalendarContextNote(calendarSelectedDate);
+      if (contextNoteForDate?.type === 'appointment') {
+        const selectedDate = new Date(calendarSelectedDate);
+        const [hour, minute] = String(reminderTime).split(':').map(Number);
+        selectedDate.setHours(hour || 0, minute || 0, 0, 0);
+        updateNoteById(contextNoteForDate.id, note => ({
+          ...note,
+          time: reminderTime,
+          eventAt: selectedDate.toISOString(),
+          reminderFirstEnabled: Boolean(reminderSettings.enabled),
+          reminderMorningTime: reminderTime,
+          reminderExplicitAt: selectedDate.toISOString(),
+          reminderUseMorningTime: !reminderPlan.noteTime && normalize(text).includes('утром'),
+          reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
+          reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
+          reminderSecondTime: reminderPlan.secondEnabled ? (reminderPlan.secondTime || reminderSettings.secondReminderTime || '20:00') : '',
+          reminderSecondEnabled: Boolean(reminderPlan.secondEnabled),
+          updatedAt: new Date().toISOString()
+        }));
+      }
       setCalendarOpen(true);
       setSettingsOpen(false);
       setStatusVoice(`Для выбранной даты установлено уведомление: ${voiceTimeToLabel(reminderTime)}.`, false);
@@ -2182,7 +2252,11 @@ export default function App() {
       time: String(calendarNoteTime || '09:00'),
       appointmentMeta,
       reminderFirstEnabled: reminderDefaults.firstEnabled,
-      reminderMorningTime: reminderDefaults.morningTime,
+      reminderMorningTime: String(calendarNoteTime || '09:00'),
+      reminderExplicitAt: selectedDate.toISOString(),
+      reminderUseMorningTime: false,
+      reminderOffsetType: reminderDefaults.offsetType,
+      reminderCustomOffsetMinutes: reminderDefaults.customOffsetMinutes,
       reminderSecondEnabled: reminderDefaults.secondEnabled,
       reminderSecondTime: reminderDefaults.secondTime
     });
@@ -2438,6 +2512,40 @@ export default function App() {
     const preferredFolder = selectedFolder !== 'Все' ? selectedFolder : '';
     const reminderDefaults = buildReminderDefaults(reminderSettings);
     try {
+      if (includesAny(source, ['включи уведомления', 'включи напоминания', 'разреши уведомления', 'активируй уведомления'])) {
+        await toggleRemindersEnabled(true);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
+      if (includesAny(source, ['выключи уведомления', 'выключи напоминания', 'отключи уведомления', 'отключи напоминания'])) {
+        await toggleRemindersEnabled(false);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
+      if (!parseVoiceCalendarTargetDate(spoken) && includesAny(source, ['открой календарь', 'покажи календарь', 'разверни календарь', 'календарь справа'])) {
+        setCalendarOpen(true);
+        setStatusVoice('Календарь открыт справа.', false);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
+      if (includesAny(source, ['закрой календарь', 'сверни календарь', 'убери календарь'])) {
+        setCalendarOpen(false);
+        setStatusVoice('Календарь свернут.', false);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
+      if (includesAny(source, ['открой настройки', 'покажи настройки', 'настройки голоса', 'настройки уведомлений'])) {
+        setSettingsOpen(true);
+        setStatusVoice('Панель настроек открыта слева.', false);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
+      if (includesAny(source, ['закрой настройки', 'сверни настройки', 'убери настройки'])) {
+        setSettingsOpen(false);
+        setStatusVoice('Настройки свернуты.', false);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
+      }
       if (handleCalendarVoiceCommand(spoken)) {
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return;
@@ -2613,366 +2721,434 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <div className="workspace">
-        <aside className="left-rail">
-          <section className="panel quick-panel">
-            <h2>Быстрая панель</h2>
+      <div className="future-backdrop" aria-hidden="true" />
+      <div className="future-workspace">
+        <aside className="left-command-panel" aria-label="Функции блокнота">
+          <section className="panel brand-panel">
+            <div className="brand-mark">AI</div>
+            <div>
+              <p className="eyebrow">Блокнот будущего</p>
+              <h1>АИ Блокнот</h1>
+              <p>Команды, папки, голос, уведомления и настройки собраны слева. Рабочие записи в центре. Микрофон и календарь закреплены справа.</p>
+            </div>
             <div className="left-actions">
+              <button type="button" className="tool-button" onClick={() => setSettingsOpen(value => !value)}>
+                {settingsOpen ? 'Скрыть настройки' : 'Настройки голоса'}
+              </button>
+              <button type="button" className="tool-button" onClick={() => setCalendarOpen(value => !value)}>
+                {calendarOpen ? 'Свернуть календарь' : 'Календарь справа'}
+              </button>
+              <button type="button" className="tool-button" onClick={enableNotifications}>Проверить шторку</button>
+            </div>
+          </section>
+
+          <section className={settingsOpen ? 'panel settings-panel expanded' : 'panel settings-panel compact'}>
+            <div className="settings-head">
+              <div>
+                <p className="eyebrow">Голос и память</p>
+                <strong>Настройки помощника</strong>
+              </div>
+              <button type="button" onClick={() => setSettingsOpen(value => !value)}>{settingsOpen ? 'Свернуть' : 'Открыть'}</button>
+            </div>
+            <div className="reminder-diagnostics">
+              <div><span>AI</span><strong>{useAI ? 'локальный включён' : 'выключен'}</strong></div>
+              <div><span>Уведомления</span><strong>{notificationPermissionLabel}</strong></div>
+              <div><span>Следующее</span><strong>{nextReminderAtLabel}</strong></div>
+              <div><span>Память телефона</span><strong>{lastReminderSyncAt ? new Date(lastReminderSyncAt).toLocaleString('ru-RU') : 'ожидает синхронизации'}</strong></div>
+            </div>
+            {settingsOpen ? (
+              <>
+                <div className="settings-head nested">
+                  <strong>Стиль речи</strong>
+                </div>
+                <div className="voice-style-list">
+                  {['default', 'male', 'child', 'robot'].map(style => (
+                    <button
+                      type="button"
+                      key={style}
+                      className={selectedVoiceStyle === style ? 'voice-style-option active' : 'voice-style-option'}
+                      onClick={() => {
+                        setSelectedVoiceStyle(style);
+                        speak(`Выбран стиль ${getVoiceStyleConfig(style).label}`, selectedVoiceURI, style);
+                      }}
+                    >
+                      {getVoiceStyleConfig(style).label}
+                    </button>
+                  ))}
+                </div>
+                <div className="voice-list">
+                  {voiceOptions.length ? voiceOptions.map(voice => (
+                    <button
+                      type="button"
+                      key={voice.voiceURI}
+                      className={selectedVoiceURI === voice.voiceURI ? 'voice-option active' : 'voice-option'}
+                      onClick={() => {
+                        setSelectedVoiceURI(voice.voiceURI);
+                        speak(`Выбран голос ${voice.name}`, voice.voiceURI, selectedVoiceStyle);
+                      }}
+                    >
+                      <span>{voiceDisplayMeta(voice).title}</span>
+                      <small>{voiceDisplayMeta(voice).subtitle}</small>
+                    </button>
+                  )) : <div className="folder-note-empty">Голоса браузера пока не загрузились</div>}
+                </div>
+                <div className="settings-head nested">
+                  <strong>Напоминания</strong>
+                  <label className="switch">
+                    <input type="checkbox" checked={Boolean(reminderSettings.enabled)} onChange={e => toggleRemindersEnabled(e.target.checked)} />
+                    <span className="slider" />
+                  </label>
+                </div>
+                <div className="reminder-grid">
+                  <label className="reminder-row">
+                    <span>По умолчанию</span>
+                    <select value={reminderSettings.defaultReminderOffset} onChange={e => setReminderSettings(prev => ({ ...prev, defaultReminderOffset: e.target.value }))}>
+                      <option value="15m">За 15 минут</option>
+                      <option value="30m">За 30 минут</option>
+                      <option value="1h">За 1 час</option>
+                      <option value="1d">За 1 день</option>
+                      <option value="custom">Своё</option>
+                    </select>
+                  </label>
+                  {reminderSettings.defaultReminderOffset === 'custom' ? (
+                    <label className="reminder-row">
+                      <span>Своё, минут</span>
+                      <input type="number" min="1" step="1" value={reminderSettings.customReminderOffsetMinutes} onChange={e => setReminderSettings(prev => ({ ...prev, customReminderOffsetMinutes: Number(e.target.value || 60) }))} />
+                    </label>
+                  ) : null}
+                  <label className="reminder-row">
+                    <span>Утром</span>
+                    <input type="time" value={reminderSettings.morningReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, morningReminderTime: e.target.value || '09:00' }))} />
+                  </label>
+                  <label className="reminder-row">
+                    <span>Тихие часы: начало</span>
+                    <input type="time" value={reminderSettings.quietHoursStart} onChange={e => setReminderSettings(prev => ({ ...prev, quietHoursStart: e.target.value || '22:00' }))} />
+                  </label>
+                  <label className="reminder-row">
+                    <span>Тихие часы: конец</span>
+                    <input type="time" value={reminderSettings.quietHoursEnd} onChange={e => setReminderSettings(prev => ({ ...prev, quietHoursEnd: e.target.value || '07:00' }))} />
+                  </label>
+                  <label className="reminder-row">
+                    <span>Второе уведомление</span>
+                    <div className="reminder-input-row">
+                      <input type="time" disabled={!reminderSettings.secondReminderEnabled} value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '20:00' }))} />
+                      <label className="switch">
+                        <input type="checkbox" checked={Boolean(reminderSettings.secondReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderEnabled: e.target.checked }))} />
+                        <span className="slider" />
+                      </label>
+                    </div>
+                  </label>
+                </div>
+              </>
+            ) : null}
+          </section>
+
+          <section className="panel folders">
+            <div className="folders-head">
+              <div>
+                <p className="eyebrow">Функционал слева</p>
+                <h2>Папки</h2>
+              </div>
+              <span>{data.notes.length}</span>
+            </div>
+            <button type="button" className={selectedFolder === 'Все' ? 'folder active' : 'folder'} onClick={() => setSelectedFolder('Все')}>Все записи <span>{data.notes.length}</span></button>
+            {data.folders.map(folder => {
+              const folderNotes = [...data.notes]
+                .filter(n => n.folder === folder.name)
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+              const count = folderNotes.length;
+              const expanded = Boolean(expandedFolders[folder.name]);
+              return (
+                <div key={folder.id} className="folder-block">
+                  <div className={selectedFolder === folder.name ? 'folder-row active' : 'folder-row'}>
+                    <button type="button" className={selectedFolder === folder.name ? 'folder folder-trigger active' : 'folder folder-trigger'} onClick={() => setSelectedFolder(folder.name)}>
+                      {folder.name}
+                      <span>{count}</span>
+                    </button>
+                    <div className="folder-controls">
+                      <button
+                        type="button"
+                        className="folder-expand"
+                        onClick={() => toggleFolderExpand(folder.name)}
+                        aria-label={expanded ? `Свернуть папку ${folder.name}` : `Развернуть папку ${folder.name}`}
+                      >
+                        {expanded ? '−' : '+'}
+                      </button>
+                      <button
+                        type="button"
+                        className="folder-delete"
+                        onClick={() => deleteFolderNow(folder.name)}
+                        aria-label={`Удалить папку ${folder.name}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                  {expanded ? (
+                    <div className="folder-notes">
+                      {folderNotes.length ? folderNotes.map((note, folderIndex) => (
+                        <div key={note.id} className="folder-note-wrap">
+                          <div className={selectedId === note.id ? 'folder-note-row active' : 'folder-note-row'}>
+                            <button
+                              type="button"
+                              className="folder-note-copy-button"
+                              onClick={() => copyNote(note)}
+                              aria-label={`Скопировать запись ${note.title}`}
+                            >
+                              ⧉
+                            </button>
+                            <button
+                              type="button"
+                              className={selectedId === note.id ? 'folder-note-item active' : 'folder-note-item'}
+                              onClick={() => openNote(note)}
+                            >
+                              <div className="folder-note-copy">
+                                <span className="folder-note-title">{folderIndex + 1}. {note.title}</span>
+                                {note.type === 'shopping_list' ? <small className="folder-note-preview">{(note.items || []).join(', ')}</small> : null}
+                              </div>
+                              <small>{formatDate(note.createdAt)}</small>
+                            </button>
+                            <button
+                              type="button"
+                              className="folder-note-expand"
+                              onClick={() => toggleNoteExpand(note.id)}
+                              aria-label={expandedNotes[note.id] ? `Свернуть запись ${note.title}` : `Развернуть запись ${note.title}`}
+                            >
+                              {expandedNotes[note.id] ? '−' : '+'}
+                            </button>
+                            <button
+                              type="button"
+                              className="folder-note-delete"
+                              onClick={() => deleteNoteNow(note)}
+                              aria-label={`Удалить запись ${note.title}`}
+                            >
+                              ×
+                            </button>
+                          </div>
+                          {expandedNotes[note.id] ? (
+                            <div className="folder-note-detail">
+                              {note.type === 'shopping_list' ? (
+                                <ul className="folder-note-list">
+                                  {(note.items || []).map((item, index) => <li key={`${note.id}_${index}`}>{item}</li>)}
+                                </ul>
+                              ) : (
+                                <div className="folder-note-text">{shareText(note)}</div>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      )) : <div className="folder-note-empty">В этой папке пока нет записей</div>}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+            <div className="folder-tools">
               <button
-                className="icon-button"
-                onClick={() => {
-                  setSettingsOpen(value => {
-                    const next = !value;
-                    if (next) setCalendarOpen(false);
-                    return next;
-                  });
-                }}
-                aria-label="Открыть настройки голоса"
+                type="button"
+                disabled={selectedFolder === 'Все' || !data.notes.some(n => n.folder === selectedFolder)}
+                onClick={() => clearFolderNow(selectedFolder)}
               >
-                ⚙
+                Очистить папку
               </button>
               <button
-                className="icon-button"
-                onClick={() => {
-                  setCalendarOpen(value => {
-                    const next = !value;
-                    if (next) setSettingsOpen(false);
-                    return next;
-                  });
-                }}
-                aria-label="Открыть календарь"
+                type="button"
+                className="danger"
+                disabled={!data.notes.length}
+                onClick={clearNotebookNow}
               >
-                🗓
+                Очистить блокнот
               </button>
             </div>
           </section>
         </aside>
 
-        <section className="right-stage">
-          <header className="hero right-hero">
-            <div>
-              <h1>АИ Блокнот</h1>
+        <main className="center-notebook" aria-label="Записи блокнота">
+          <section className="panel notes">
+            <div className="notes-head">
+              <div>
+                <p className="eyebrow">Рабочая область</p>
+                <h2>{selectedFolder}</h2>
+                <p>{visibleNotes.length} записей{selectedNote ? ` · открыта №${selectedNoteIndex + 1}` : ''}</p>
+              </div>
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Поиск по заметкам, контактам и папкам" />
             </div>
-            <div className="hero-actions">
-              <button className={listening ? 'danger big' : 'primary big'} onClick={listening ? stopListening : startListening}>{listening ? 'Остановить' : 'Говорить'}</button>
+            <div className="history-chips">
+              <button type="button" className={historyFilter === 'all' && !quickDateFilter ? 'active' : ''} onClick={() => showPeriod('all')}>Все</button>
+              <button type="button" className={historyFilter === 'today' ? 'active' : ''} onClick={() => showPeriod('today')}>Сегодня</button>
+              <button type="button" className={historyFilter === 'yesterday' ? 'active' : ''} onClick={() => showPeriod('yesterday')}>Вчера</button>
+              <button type="button" className={historyFilter === 'week' ? 'active' : ''} onClick={() => showPeriod('week')}>Неделя</button>
             </div>
-          </header>
-
-      <section className="status-grid right-status">
-        <div className="status-card wide">
-          <span>Статус</span>
-          <strong>{status}</strong>
-          {suggestedFolder ? <button onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
-          <div className="quick-date-strip">
-            <button className={!quickDateFilter ? 'active' : ''} onClick={() => showQuickDate('')}>Все даты</button>
-            {quickDateStrip.map(item => (
-              <button
-                key={item.key}
-                className={quickDateFilter === item.isoDay ? 'active' : ''}
-                onClick={() => showQuickDate(item.isoDay)}
-              >
-                <span>{item.day}</span>
-                <small>{item.label}</small>
-              </button>
-            ))}
-          </div>
-        </div>
-        <form className="manual" onSubmit={submitManual}>
-          <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду или нажмите «Говорить»" />
-          <button className="primary">Выполнить</button>
-        </form>
-      </section>
-
-      {settingsOpen ? (
-        <section className="settings-panel">
-          <div className="settings-head">
-            <strong>Голос помощника</strong>
-            <button onClick={() => setSettingsOpen(false)}>Закрыть</button>
-          </div>
-          <div className="voice-style-list">
-            {['default', 'male', 'child', 'robot'].map(style => (
-              <button
-                key={style}
-                className={selectedVoiceStyle === style ? 'voice-style-option active' : 'voice-style-option'}
-                onClick={() => {
-                  setSelectedVoiceStyle(style);
-                  speak(`Выбран стиль ${getVoiceStyleConfig(style).label}`, selectedVoiceURI, style);
-                }}
-              >
-                {getVoiceStyleConfig(style).label}
-              </button>
-            ))}
-          </div>
-          <div className="voice-list">
-            {voiceOptions.length ? voiceOptions.map(voice => (
-              <button
-                key={voice.voiceURI}
-                className={selectedVoiceURI === voice.voiceURI ? 'voice-option active' : 'voice-option'}
-                onClick={() => {
-                  setSelectedVoiceURI(voice.voiceURI);
-                  speak(`Выбран голос ${voice.name}`, voice.voiceURI, selectedVoiceStyle);
-                }}
-              >
-                <span>{voiceDisplayMeta(voice).title}</span>
-                <small>{voiceDisplayMeta(voice).subtitle}</small>
-              </button>
-            )) : <div className="folder-note-empty">Голоса браузера пока не загрузились</div>}
-          </div>
-          <div className="settings-head">
-            <strong>Напоминания</strong>
-            <label className="switch">
-              <input type="checkbox" checked={Boolean(reminderSettings.enabled)} onChange={e => toggleRemindersEnabled(e.target.checked)} />
-              <span className="slider" />
-            </label>
-          </div>
-          <div className="reminder-grid">
-            <label className="reminder-row">
-              <span>Напоминание по умолчанию</span>
-              <select value={reminderSettings.defaultReminderOffset} onChange={e => setReminderSettings(prev => ({ ...prev, defaultReminderOffset: e.target.value }))}>
-                <option value="15m">За 15 минут</option>
-                <option value="30m">За 30 минут</option>
-                <option value="1h">За 1 час</option>
-                <option value="1d">За 1 день</option>
-                <option value="custom">Своё</option>
-              </select>
-            </label>
-            {reminderSettings.defaultReminderOffset === 'custom' ? (
-              <label className="reminder-row">
-                <span>Своё значение, минут</span>
-                <input type="number" min="1" step="1" value={reminderSettings.customReminderOffsetMinutes} onChange={e => setReminderSettings(prev => ({ ...prev, customReminderOffsetMinutes: Number(e.target.value || 60) }))} />
-              </label>
+            {selectedNote ? (
+              <div className="selected-strip">
+                <span>Открыта: {selectedNote.title}</span>
+                <div>
+                  <button type="button" onClick={() => copyNote(selectedNote)}>Копировать</button>
+                  <button type="button" onClick={() => shareNote(selectedNote)}>Поделиться</button>
+                </div>
+              </div>
             ) : null}
-            <label className="reminder-row">
-              <span>Утром</span>
-              <input type="time" value={reminderSettings.morningReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, morningReminderTime: e.target.value || '09:00' }))} />
-            </label>
-            <label className="reminder-row">
-              <span>Тихие часы: начало</span>
-              <input type="time" value={reminderSettings.quietHoursStart} onChange={e => setReminderSettings(prev => ({ ...prev, quietHoursStart: e.target.value || '22:00' }))} />
-            </label>
-            <label className="reminder-row">
-              <span>Тихие часы: конец</span>
-              <input type="time" value={reminderSettings.quietHoursEnd} onChange={e => setReminderSettings(prev => ({ ...prev, quietHoursEnd: e.target.value || '07:00' }))} />
-            </label>
-            <label className="reminder-row">
-              <span>Второе уведомление</span>
-              <div className="reminder-input-row">
-                <input type="time" disabled={!reminderSettings.secondReminderEnabled} value={reminderSettings.secondReminderTime} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderTime: e.target.value || '20:00' }))} />
-                <label className="switch">
-                  <input type="checkbox" checked={Boolean(reminderSettings.secondReminderEnabled)} onChange={e => setReminderSettings(prev => ({ ...prev, secondReminderEnabled: e.target.checked }))} />
-                  <span className="slider" />
-                </label>
-              </div>
-            </label>
-          </div>
-          <div className="reminder-diagnostics">
-            <div><span>Разрешение уведомлений</span><strong>{notificationPermissionLabel}</strong></div>
-            <div><span>Следующее локальное</span><strong>{nextReminderAtLabel}</strong></div>
-            <div><span>Последняя синхронизация SW</span><strong>{lastReminderSyncAt ? new Date(lastReminderSyncAt).toLocaleString('ru-RU') : 'еще не было'}</strong></div>
-          </div>
-        </section>
-      ) : null}
-
-      {calendarOpen ? (
-        <section className="settings-panel calendar-panel">
-          <div className="settings-head">
-            <strong>Календарь</strong>
-            <button onClick={() => setCalendarOpen(false)}>Закрыть</button>
-          </div>
-          <div className="calendar-compose">
-            <div className="calendar-compose-row calendar-compose-main">
-              <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на выбранную дату" />
-              <button className="primary" onClick={saveCalendarNote}>Сохранить</button>
+            <div className="note-list">
+              {visibleNotes.length ? visibleNotes.map((note, index) => (
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  displayIndex={index + 1}
+                  selected={selectedId === note.id}
+                  onOpen={openNote}
+                  onShare={shareNote}
+                  onCopy={copyNote}
+                  onDelete={deleteNoteNow}
+                  onCall={callNote}
+                  onMessage={messageNote}
+                />
+              )) : <div className="empty">Записей пока нет. Скажите команду справа или напишите её в поле микрофона.</div>}
             </div>
-          </div>
-          <div className="calendar-list">
-            {calendarMonths.map(month => (
-              <div key={month.key} className="calendar-month">
-                <h3>{capitalize(month.title)}</h3>
-                <div className="calendar-grid">
-                  {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => <div key={`${month.key}_${day}`} className="calendar-weekday">{day}</div>)}
-                  {Array.from({ length: month.firstWeekday }).map((_, idx) => <div key={`${month.key}_empty_${idx}`} className="calendar-day empty" />)}
-                  {Array.from({ length: month.daysInMonth }, (_, dayIndex) => {
-                    const dayDate = new Date(month.monthDate.getFullYear(), month.monthDate.getMonth(), dayIndex + 1, 12, 0, 0, 0);
-                    const dayIso = dayDate.toISOString();
-                    const dayItems = month.items.filter(note => String(note.eventAt || '').slice(0, 10) === dayIso.slice(0, 10));
-                    const hasItems = dayItems.length > 0;
-                    const isSelected = calendarSelectedDate && String(calendarSelectedDate).slice(0, 10) === dayIso.slice(0, 10);
-                    return (
-                      <button
-                        type="button"
-                        key={`${month.key}_${dayIndex + 1}`}
-                        className={`calendar-day${hasItems ? ' has-items' : ''}${isSelected ? ' active' : ''}`}
-                        onClick={() => selectCalendarDate(dayDate, { clearContext: true })}
-                      >
-                        <span>{dayIndex + 1}</span>
-                        {dayItems.length > 0 ? <small onClick={event => { event.stopPropagation(); toggleCalendarDayPanelForDate(dayDate); }}>{dayItems.length}</small> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-                {calendarDayPanelOpen &&
-                calendarSelectedDate &&
-                (() => {
-                  const panelDate = new Date(calendarSelectedDate);
-                  return panelDate.getFullYear() === month.monthDate.getFullYear() && panelDate.getMonth() === month.monthDate.getMonth();
-                })() ? (
-                  <div className="calendar-day-panel">
-                    <div className="calendar-day-panel-head">
-                      <strong>{formatCalendarDateLabel(new Date(calendarSelectedDate))}</strong>
-                      <button type="button" onClick={() => setCalendarDayPanelOpen(false)}>Свернуть</button>
-                    </div>
-                    <input
-                      className="calendar-day-filter"
-                      value={calendarDayFilter}
-                      onChange={event => setCalendarDayFilter(event.target.value)}
-                      placeholder="Фильтр по напоминаниям дня"
-                    />
-                    {filteredCalendarDayNotes.length ? filteredCalendarDayNotes.map(note => (
-                      <div key={note.id} className="calendar-day-note">
-                        <div className="calendar-day-note-main">
-                          <strong>{note.time || '--:--'} · {note.title}</strong>
-                          <span>{[note.placeLabel, note.content].filter(Boolean).join(' · ')}</span>
-                        </div>
-                        <div className="calendar-day-note-actions">
-                          <button type="button" onClick={() => openNote(note)}>Открыть</button>
-                          <button type="button" onClick={() => completeCalendarDayNote(note)}>Выполнить</button>
-                          <button type="button" onClick={() => postponeCalendarDayNoteToTomorrow(note)}>Завтра</button>
-                          <button type="button" className="danger" onClick={() => deleteNoteNow(note)}>Удалить</button>
-                        </div>
-                      </div>
-                    )) : <div className="folder-note-empty">На выбранную дату нет напоминаний</div>}
-                  </div>
-                ) : null}
-                {month.items.length ? month.items.map(note => (
-                  <button type="button" key={note.id} className="calendar-item" onClick={() => openNote(note)}>
-                    <strong>{note.title}</strong>
-                    <span>{[note.dateLabel, note.time, note.placeLabel].filter(Boolean).join(' · ')}</span>
-                  </button>
-                )) : <div className="folder-note-empty">Пока пусто</div>}
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      <main className="layout right-layout">
-        <aside className="panel folders">
-          <h2>Папки</h2>
-          <button className={selectedFolder === 'Все' ? 'folder active' : 'folder'} onClick={() => setSelectedFolder('Все')}>Все записи <span>{data.notes.length}</span></button>
-          {data.folders.map(folder => {
-            const folderNotes = [...data.notes]
-              .filter(n => n.folder === folder.name)
-              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            const count = folderNotes.length;
-            const expanded = Boolean(expandedFolders[folder.name]);
-            return (
-              <div key={folder.id} className="folder-block">
-                <div className={selectedFolder === folder.name ? 'folder-row active' : 'folder-row'}>
-                  <button className={selectedFolder === folder.name ? 'folder folder-trigger active' : 'folder folder-trigger'} onClick={() => setSelectedFolder(folder.name)}>
-                    {folder.name}
-                    <span>{count}</span>
-                  </button>
-                  <div className="folder-controls">
-                    <button
-                      className="folder-expand"
-                      onClick={() => toggleFolderExpand(folder.name)}
-                      aria-label={expanded ? `Свернуть папку ${folder.name}` : `Развернуть папку ${folder.name}`}
-                    >
-                      {expanded ? '−' : '+'}
-                    </button>
-                    <button
-                      className="folder-delete"
-                      onClick={() => deleteFolderNow(folder.name)}
-                      aria-label={`Удалить папку ${folder.name}`}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-                {expanded ? (
-                  <div className="folder-notes">
-                    {folderNotes.length ? folderNotes.map((note, folderIndex) => (
-                      <div key={note.id} className="folder-note-wrap">
-                        <div className={selectedId === note.id ? 'folder-note-row active' : 'folder-note-row'}>
-                          <button
-                            className="folder-note-copy-button"
-                            onClick={() => copyNote(note)}
-                            aria-label={`Скопировать запись ${note.title}`}
-                          >
-                            ⧉
-                          </button>
-                          <button
-                            className={selectedId === note.id ? 'folder-note-item active' : 'folder-note-item'}
-                            onClick={() => openNote(note)}
-                          >
-                            <div className="folder-note-copy">
-                              <span className="folder-note-title">{folderIndex + 1}. {note.title}</span>
-                              {note.type === 'shopping_list' ? <small className="folder-note-preview">{(note.items || []).join(', ')}</small> : null}
-                            </div>
-                            <small>{formatDate(note.createdAt)}</small>
-                          </button>
-                          <button
-                            className="folder-note-expand"
-                            onClick={() => toggleNoteExpand(note.id)}
-                            aria-label={expandedNotes[note.id] ? `Свернуть запись ${note.title}` : `Развернуть запись ${note.title}`}
-                          >
-                            {expandedNotes[note.id] ? '−' : '+'}
-                          </button>
-                          <button
-                            className="folder-note-delete"
-                            onClick={() => deleteNoteNow(note)}
-                            aria-label={`Удалить запись ${note.title}`}
-                          >
-                            ×
-                          </button>
-                        </div>
-                        {expandedNotes[note.id] ? (
-                          <div className="folder-note-detail">
-                            {note.type === 'shopping_list' ? (
-                              <ul className="folder-note-list">
-                                {(note.items || []).map((item, index) => <li key={`${note.id}_${index}`}>{item}</li>)}
-                              </ul>
-                            ) : (
-                              <div className="folder-note-text">{shareText(note)}</div>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    )) : <div className="folder-note-empty">В этой папке пока нет записей</div>}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-          <div className="folder-tools">
-            <button
-              disabled={selectedFolder === 'Все' || !data.notes.some(n => n.folder === selectedFolder)}
-              onClick={() => clearFolderNow(selectedFolder)}
-            >
-              Очистить папку
-            </button>
-            <button
-              className="danger"
-              disabled={!data.notes.length}
-              onClick={clearNotebookNow}
-            >
-              Очистить блокнот
-            </button>
-          </div>
-        </aside>
+          </section>
+        </main>
 
-        <section className="panel notes">
-          <div className="notes-head">
-            <div><h2>{selectedFolder}</h2><p>{visibleNotes.length} записей</p></div>
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Поиск по заметкам" />
-          </div>
-          <div className="note-list">
-            {visibleNotes.length ? visibleNotes.map((note, index) => <NoteCard key={note.id} note={note} displayIndex={index + 1} selected={selectedId === note.id} onOpen={openNote} onShare={shareNote} onCopy={copyNote} onDelete={deleteNoteNow} onCall={callNote} onMessage={messageNote} />) : <div className="empty">Записей пока нет. Скажите или напишите команду.</div>}
-          </div>
-        </section>
-      </main>
-      </section>
+        <aside className="right-ai-panel" aria-label="Микрофон и календарь">
+          <section className="panel ai-comm-panel">
+            <div className="ai-panel-head">
+              <div>
+                <p className="eyebrow">Общение с блокнотом</p>
+                <h2>Микрофон справа</h2>
+              </div>
+              <span className={listening ? 'live-dot active' : 'live-dot'} />
+            </div>
+            <button
+              type="button"
+              className={listening ? 'mic-button listening' : 'mic-button'}
+              onClick={listening ? stopListening : startListening}
+              aria-label={listening ? 'Остановить голосовой ввод' : 'Начать голосовой ввод'}
+            >
+              <span>{listening ? '■' : '●'}</span>
+              <strong>{listening ? 'Слушаю' : 'Говорить'}</strong>
+            </button>
+            <div className="status-card">
+              <span>Статус</span>
+              <strong>{status}</strong>
+              {suggestedFolder ? <button type="button" onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
+            </div>
+            <form className="manual" onSubmit={submitManual}>
+              <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Команда: запомни, найди, напомни, открой календарь" />
+              <button type="submit" className="primary">Выполнить</button>
+            </form>
+            <div className="quick-date-strip">
+              <button type="button" className={!quickDateFilter ? 'active' : ''} onClick={() => showQuickDate('')}>Все даты</button>
+              {quickDateStrip.map(item => (
+                <button
+                  type="button"
+                  key={item.key}
+                  className={quickDateFilter === item.isoDay ? 'active' : ''}
+                  onClick={() => showQuickDate(item.isoDay)}
+                >
+                  <span>{item.day}</span>
+                  <small>{item.label}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {calendarOpen ? (
+            <section className="panel calendar-panel">
+              <div className="settings-head">
+                <div>
+                  <p className="eyebrow">Календарь справа</p>
+                  <strong>Дата и уведомления</strong>
+                </div>
+                <button type="button" onClick={() => setCalendarOpen(false)}>Свернуть</button>
+              </div>
+              <div className="calendar-compose">
+                <div className="calendar-compose-row compact-date-row">
+                  <select value={calendarDayPicker.selectedDay} onChange={event => selectCalendarDayFromPicker(event.target.value)}>
+                    {calendarDayPicker.options.map(day => <option key={day} value={day}>{day}</option>)}
+                  </select>
+                  <input type="time" value={calendarNoteTime} onChange={event => setCalendarNoteTime(event.target.value || '09:00')} />
+                </div>
+                <div className="calendar-compose-row calendar-compose-main">
+                  <input value={calendarNoteText} onChange={e => setCalendarNoteText(e.target.value)} placeholder="Что добавить на выбранную дату" />
+                  <button type="button" className="primary" onClick={saveCalendarNote}>Сохранить</button>
+                </div>
+              </div>
+              <div className="calendar-list">
+                {calendarMonths.map(month => (
+                  <div key={month.key} className="calendar-month">
+                    <h3>{capitalize(month.title)}</h3>
+                    <div className="calendar-grid">
+                      {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => <div key={`${month.key}_${day}`} className="calendar-weekday">{day}</div>)}
+                      {Array.from({ length: month.firstWeekday }).map((_, idx) => <div key={`${month.key}_empty_${idx}`} className="calendar-day empty" />)}
+                      {Array.from({ length: month.daysInMonth }, (_, dayIndex) => {
+                        const dayDate = new Date(month.monthDate.getFullYear(), month.monthDate.getMonth(), dayIndex + 1, 12, 0, 0, 0);
+                        const dayIso = dayDate.toISOString();
+                        const dayItems = month.items.filter(note => String(note.eventAt || '').slice(0, 10) === dayIso.slice(0, 10));
+                        const hasItems = dayItems.length > 0;
+                        const isSelected = calendarSelectedDate && String(calendarSelectedDate).slice(0, 10) === dayIso.slice(0, 10);
+                        return (
+                          <button
+                            type="button"
+                            key={`${month.key}_${dayIndex + 1}`}
+                            className={`calendar-day${hasItems ? ' has-items' : ''}${isSelected ? ' active' : ''}`}
+                            onClick={() => selectCalendarDate(dayDate, { clearContext: true, openDayPanel: hasItems })}
+                          >
+                            <span>{dayIndex + 1}</span>
+                            {dayItems.length > 0 ? <small>{dayItems.length}</small> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {calendarDayPanelOpen &&
+                    calendarSelectedDate &&
+                    (() => {
+                      const panelDate = new Date(calendarSelectedDate);
+                      return panelDate.getFullYear() === month.monthDate.getFullYear() && panelDate.getMonth() === month.monthDate.getMonth();
+                    })() ? (
+                      <div className="calendar-day-panel">
+                        <div className="calendar-day-panel-head">
+                          <strong>{formatCalendarDateLabel(new Date(calendarSelectedDate))}</strong>
+                          <button type="button" onClick={() => setCalendarDayPanelOpen(false)}>Свернуть</button>
+                        </div>
+                        <input
+                          className="calendar-day-filter"
+                          value={calendarDayFilter}
+                          onChange={event => setCalendarDayFilter(event.target.value)}
+                          placeholder="Фильтр по напоминаниям дня"
+                        />
+                        {filteredCalendarDayNotes.length ? filteredCalendarDayNotes.map(note => (
+                          <div key={note.id} className="calendar-day-note">
+                            <div className="calendar-day-note-main">
+                              <strong>{note.time || '--:--'} · {note.title}</strong>
+                              <span>{[note.placeLabel, note.content].filter(Boolean).join(' · ')}</span>
+                            </div>
+                            <div className="calendar-day-note-actions">
+                              <button type="button" onClick={() => openNote(note)}>Открыть</button>
+                              <button type="button" onClick={() => completeCalendarDayNote(note)}>Выполнить</button>
+                              <button type="button" onClick={() => postponeCalendarDayNoteToTomorrow(note)}>Завтра</button>
+                              <button type="button" className="danger" onClick={() => deleteNoteNow(note)}>Удалить</button>
+                            </div>
+                          </div>
+                        )) : <div className="folder-note-empty">На выбранную дату нет напоминаний</div>}
+                      </div>
+                    ) : null}
+                    {month.items.length ? month.items.map(note => (
+                      <button type="button" key={note.id} className="calendar-item" onClick={() => openNote(note)}>
+                        <strong>{note.title}</strong>
+                        <span>{[note.dateLabel, note.time, note.placeLabel].filter(Boolean).join(' · ')}</span>
+                      </button>
+                    )) : <div className="folder-note-empty">Пока пусто</div>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : (
+            <section className="panel calendar-panel calendar-collapsed">
+              <p className="eyebrow">Календарь справа</p>
+              <button type="button" className="primary" onClick={() => setCalendarOpen(true)}>Открыть календарь</button>
+            </section>
+          )}
+        </aside>
       </div>
     </div>
   );
+
 }
