@@ -2613,40 +2613,75 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="hero">
-        <div>
-          <h1>АИ Блокнот</h1>
-        </div>
-        <div className="hero-actions">
-          <button
-            className="icon-button"
-            onClick={() => {
-              setSettingsOpen(value => {
-                const next = !value;
-                if (next) setCalendarOpen(false);
-                return next;
-              });
-            }}
-            aria-label="Открыть настройки голоса"
-          >
-            ⚙
-          </button>
-          <button
-            className="icon-button"
-            onClick={() => {
-              setCalendarOpen(value => {
-                const next = !value;
-                if (next) setSettingsOpen(false);
-                return next;
-              });
-            }}
-            aria-label="Открыть календарь"
-          >
-            🗓
-          </button>
-          <button className={listening ? 'danger big' : 'primary big'} onClick={listening ? stopListening : startListening}>{listening ? 'Остановить' : 'Говорить'}</button>
-        </div>
-      </header>
+      <div className="workspace">
+        <aside className="left-rail">
+          <section className="panel quick-panel">
+            <h2>Быстрая панель</h2>
+            <div className="left-actions">
+              <button
+                className="icon-button"
+                onClick={() => {
+                  setSettingsOpen(value => {
+                    const next = !value;
+                    if (next) setCalendarOpen(false);
+                    return next;
+                  });
+                }}
+                aria-label="Открыть настройки голоса"
+              >
+                ⚙
+              </button>
+              <button
+                className="icon-button"
+                onClick={() => {
+                  setCalendarOpen(value => {
+                    const next = !value;
+                    if (next) setSettingsOpen(false);
+                    return next;
+                  });
+                }}
+                aria-label="Открыть календарь"
+              >
+                🗓
+              </button>
+            </div>
+          </section>
+
+          <section className="status-grid left-status">
+            <div className="status-card wide">
+              <span>Статус</span>
+              <strong>{status}</strong>
+              {suggestedFolder ? <button onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
+              <div className="quick-date-strip">
+                <button className={!quickDateFilter ? 'active' : ''} onClick={() => showQuickDate('')}>Все даты</button>
+                {quickDateStrip.map(item => (
+                  <button
+                    key={item.key}
+                    className={quickDateFilter === item.isoDay ? 'active' : ''}
+                    onClick={() => showQuickDate(item.isoDay)}
+                  >
+                    <span>{item.day}</span>
+                    <small>{item.label}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <form className="manual" onSubmit={submitManual}>
+              <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду или нажмите «Говорить»" />
+              <button className="primary">Выполнить</button>
+            </form>
+          </section>
+        </aside>
+
+        <section className="right-stage">
+          <header className="hero right-hero">
+            <div>
+              <h1>АИ Блокнот</h1>
+            </div>
+            <div className="hero-actions">
+              <button className={listening ? 'danger big' : 'primary big'} onClick={listening ? stopListening : startListening}>{listening ? 'Остановить' : 'Говорить'}</button>
+            </div>
+          </header>
 
       {settingsOpen ? (
         <section className="settings-panel">
@@ -2820,33 +2855,7 @@ export default function App() {
           </div>
         </section>
       ) : null}
-
-      <section className="status-grid">
-        <div className="status-card wide">
-          <span>Статус</span>
-          <strong>{status}</strong>
-          {suggestedFolder ? <button onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
-          <div className="quick-date-strip">
-            <button className={!quickDateFilter ? 'active' : ''} onClick={() => showQuickDate('')}>Все даты</button>
-            {quickDateStrip.map(item => (
-              <button
-                key={item.key}
-                className={quickDateFilter === item.isoDay ? 'active' : ''}
-                onClick={() => showQuickDate(item.isoDay)}
-              >
-                <span>{item.day}</span>
-                <small>{item.label}</small>
-              </button>
-            ))}
-          </div>
-        </div>
-        <form className="manual" onSubmit={submitManual}>
-          <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду или нажмите «Говорить»" />
-          <button className="primary">Выполнить</button>
-        </form>
-      </section>
-
-      <main className="layout">
+      <main className="layout right-layout">
         <aside className="panel folders">
           <h2>Папки</h2>
           <button className={selectedFolder === 'Все' ? 'folder active' : 'folder'} onClick={() => setSelectedFolder('Все')}>Все записи <span>{data.notes.length}</span></button>
@@ -2962,6 +2971,8 @@ export default function App() {
           </div>
         </section>
       </main>
+      </section>
+      </div>
     </div>
   );
 }
