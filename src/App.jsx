@@ -1868,6 +1868,28 @@ export default function App() {
 
     const folder = resolveSaveFolder(content, 'appointment', preferredFolder);
     const appointmentMeta = extractAppointmentMeta(content);
+    const sameDayExisting = notesForCalendarDate(calendarSelectedDate)
+      .find(item => normalize(item.content || '') === normalize(content));
+    if (sameDayExisting) {
+      updateCalendarAppointmentNote(
+        sameDayExisting.id,
+        content,
+        noteTime,
+        {
+          firstEnabled: Boolean(reminderSettings.enabled),
+          morningTime: noteTime,
+          secondEnabled: Boolean(reminderSettings.secondReminderEnabled),
+          secondTime: reminderSettings.secondReminderTime || '20:00'
+        },
+        calendarSelectedDate
+      );
+      setCalendarDayPanelOpen(true);
+      setCalendarDayFilter('');
+      setCalendarNoteTime(noteTime);
+      setStatusVoice(`Обновил запись на ${formatCalendarDateLabel(selectedDate)}.`, false);
+      return true;
+    }
+
     const note = buildAppointmentNote({
       uid,
       selectedDate,
@@ -2222,6 +2244,9 @@ export default function App() {
   async function executePlan(plan, originalText) {
     if (!plan?.action || plan.action === 'unknown') return false;
     const preferredFolder = selectedFolder !== 'Все' ? selectedFolder : '';
+    if (calendarSelectedDate && calendarOpen && String(plan.action).startsWith('save_')) {
+      return saveCalendarNoteFromCommand(originalText, preferredFolder);
+    }
     const reminderDefaults = buildReminderDefaults(reminderSettings);
     if (plan.action === 'save_shopping_list' && isShoppingAppendCommand(originalText)) {
       const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
