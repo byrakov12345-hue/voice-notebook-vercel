@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, queueServerPushReminderSchedule, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, ensurePushSubscriptionCached, isNotificationSupported, queueServerPushReminderSchedule, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1249,6 +1249,7 @@ export default function App() {
     let cancelled = false;
     const sync = async () => {
       if (cancelled) return;
+      await ensurePushSubscriptionCached();
       queueServerPushReminderSchedule(data.notes, reminderSettings);
       await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
       await registerReminderRecoverySync();
@@ -1266,6 +1267,27 @@ export default function App() {
       window.removeEventListener('focus', sync);
       window.removeEventListener('pageshow', sync);
       document.removeEventListener('visibilitychange', sync);
+    };
+  }, [data.notes, reminderSettings]);
+
+  useEffect(() => {
+    if (!reminderSettings.enabled || !isNotificationSupported() || Notification.permission !== 'granted') return undefined;
+
+    const flushOnHide = () => {
+      if (document.visibilityState !== 'hidden') return;
+      queueServerPushReminderSchedule(data.notes, reminderSettings);
+      syncServerPushReminderScheduleInServiceWorker(data.notes, reminderSettings).catch(() => {});
+    };
+    const flushOnPageHide = () => {
+      queueServerPushReminderSchedule(data.notes, reminderSettings);
+      syncServerPushReminderScheduleInServiceWorker(data.notes, reminderSettings).catch(() => {});
+    };
+
+    document.addEventListener('visibilitychange', flushOnHide);
+    window.addEventListener('pagehide', flushOnPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', flushOnHide);
+      window.removeEventListener('pagehide', flushOnPageHide);
     };
   }, [data.notes, reminderSettings]);
 
@@ -1567,7 +1589,9 @@ export default function App() {
     const syncSavedReminder = () => {
       const nextSettings = { ...reminderSettings, enabled: true };
       const notesForSync = [note, ...data.notes.filter(existing => existing.id !== note.id)];
-      queueServerPushReminderSchedule(notesForSync, nextSettings);
+      ensurePushSubscriptionCached().then(() => {
+        queueServerPushReminderSchedule(notesForSync, nextSettings);
+      });
       syncServiceWorkerReminderSchedule(notesForSync, nextSettings).then(ok => {
         if (!ok) setStatusVoice('Запись сохранена. Телефон пока не подтвердил локальную память напоминания.', false);
       });
@@ -2005,6 +2029,7 @@ export default function App() {
     const result = await requestNotificationPermission();
     if (result === 'granted') {
       await showServiceWorkerTestNotification();
+      await ensurePushSubscriptionCached();
       queueServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
       await registerReminderRecoverySync();
       await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true });
@@ -2032,6 +2057,7 @@ export default function App() {
     }
     if (result.status !== 'granted') return setStatusVoice('Разрешение на уведомления не выдано.', false);
     await showServiceWorkerTestNotification();
+    await ensurePushSubscriptionCached();
     queueServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
     await syncServiceWorkerReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
     await registerReminderRecoverySync();

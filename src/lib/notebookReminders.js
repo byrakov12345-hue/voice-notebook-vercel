@@ -268,6 +268,37 @@ export async function syncServerPushReminderScheduleInServiceWorker(notes = [], 
   }
 }
 
+export async function ensurePushSubscriptionCached() {
+  if (
+    typeof window === 'undefined' ||
+    !('serviceWorker' in navigator) ||
+    !('PushManager' in window) ||
+    !isNotificationSupported() ||
+    Notification.permission !== 'granted'
+  ) {
+    return { ok: false, status: 'unsupported' };
+  }
+
+  try {
+    const config = await fetchPushConfig();
+    if (!config?.vapidConfigured) return { ok: false, status: 'vapid_missing' };
+    if (!config?.publicKey) return { ok: false, status: 'public_key_missing' };
+
+    const registration = await navigator.serviceWorker.getRegistration() || await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(config.publicKey)
+      });
+    }
+    const cached = cachePushSubscription(subscription);
+    return cached ? { ok: true, status: 'cached' } : { ok: false, status: 'cache_failed' };
+  } catch (error) {
+    return { ok: false, status: error?.message || 'cache_failed' };
+  }
+}
+
 export async function registerReminderRecoverySync() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return false;
   try {
