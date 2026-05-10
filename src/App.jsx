@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isMobileBrowserTabMode, isNotificationSupported, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isMobileBrowserTabMode, isNotificationSupported, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1275,7 +1275,7 @@ export default function App() {
       if (cancelled) return;
       const ok = await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
       if (ok) setLastReminderSyncAt(new Date().toISOString());
-      await syncServerPushReminderScheduleInServiceWorker(data.notes, reminderSettings).catch(() => ({ ok: false }));
+      await syncServerRemindersBestEffort(data.notes, reminderSettings);
       await registerReminderRecoverySync();
     };
     sync();
@@ -1567,6 +1567,12 @@ export default function App() {
     setStatusVoice('Блокнот очищен.', false);
   }
 
+  async function syncServerRemindersBestEffort(notes, settings) {
+    const viaWorker = await syncServerPushReminderScheduleInServiceWorker(notes, settings).catch(() => ({ ok: false }));
+    if (viaWorker?.ok) return viaWorker;
+    return syncServerPushReminderSchedule(notes, settings).catch(() => ({ ok: false }));
+  }
+
   function saveNote(note, showAfterSave = false) {
     const dedupeWindowMs = 20000;
     const incomingSignature = noteSignature(note);
@@ -1626,7 +1632,7 @@ export default function App() {
           setStatusVoice('Запись сохранена. Телефон пока не подтвердил локальную память напоминания.', false);
         }
       });
-      syncServerPushReminderScheduleInServiceWorker(notesForSync, nextSettings).catch(() => ({ ok: false }));
+      syncServerRemindersBestEffort(notesForSync, nextSettings).catch(() => ({ ok: false }));
       registerReminderRecoverySync();
       if (isMobileBrowserTabMode()) {
         setStatusVoice('Для стабильных фоновых уведомлений на телефоне откройте блокнот с главного экрана, не из вкладки браузера.', false);
@@ -2217,7 +2223,7 @@ export default function App() {
     if (result.status === 'disabled') {
       const ok = await syncServiceWorkerReminderSchedule([], { ...reminderSettings, enabled: false });
       if (ok) setLastReminderSyncAt(new Date().toISOString());
-      await syncServerPushReminderScheduleInServiceWorker([], { ...reminderSettings, enabled: false }).catch(() => ({ ok: false }));
+      await syncServerRemindersBestEffort([], { ...reminderSettings, enabled: false });
       await registerReminderRecoverySync();
       return setStatusVoice('Напоминания выключены.', false);
     }
@@ -2225,7 +2231,7 @@ export default function App() {
     await showServiceWorkerTestNotification();
     const ok = await syncServiceWorkerReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
     if (ok) setLastReminderSyncAt(new Date().toISOString());
-    await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true }).catch(() => ({ ok: false }));
+    await syncServerRemindersBestEffort(data.notes, { ...reminderSettings, enabled: true });
     await registerReminderRecoverySync();
     if (isMobileBrowserTabMode()) {
       setStatusVoice('Напоминания включены. Для стабильной фоновой доставки на телефоне используйте запуск с главного экрана.', false);
