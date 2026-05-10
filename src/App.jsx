@@ -1082,6 +1082,8 @@ export default function App() {
   const [quickDateFilter, setQuickDateFilter] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarSelectedDate, setCalendarSelectedDate] = useState('');
+  const [calendarDayPanelOpen, setCalendarDayPanelOpen] = useState(false);
+  const [calendarDayFilter, setCalendarDayFilter] = useState('');
   const [calendarNoteText, setCalendarNoteText] = useState('');
   const [calendarNoteTime, setCalendarNoteTime] = useState('09:00');
   const [reminderSettings, setReminderSettings] = useState(() => {
@@ -1327,6 +1329,18 @@ export default function App() {
     return list;
   }, [data.notes, selectedFolder, query, historyFilter, quickDateFilter]);
   const calendarMonths = useMemo(() => buildCalendarMonths(data.notes), [data.notes]);
+  const selectedCalendarDayNotes = useMemo(() => notesForCalendarDateByDate(data.notes, calendarSelectedDate), [data.notes, calendarSelectedDate]);
+  const filteredCalendarDayNotes = useMemo(() => {
+    const queryText = normalize(calendarDayFilter);
+    if (!queryText) return selectedCalendarDayNotes;
+    return selectedCalendarDayNotes.filter(note => normalize([
+      note.title,
+      note.content,
+      note.placeLabel,
+      note.actionLabel,
+      note.codeLabel
+    ].filter(Boolean).join(' ')).includes(queryText));
+  }, [selectedCalendarDayNotes, calendarDayFilter]);
   const quickDateStrip = useMemo(() => buildQuickDateStrip(), []);
   const calendarDayPicker = useMemo(() => {
     const baseDate = calendarSelectedDate ? new Date(calendarSelectedDate) : new Date();
@@ -1681,10 +1695,12 @@ export default function App() {
 
   function selectCalendarDate(date, options = {}) {
     if (!date) return;
-    const { clearContext = false } = options;
+    const { clearContext = false, openDayPanel = false } = options;
     const iso = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0).toISOString();
     setCalendarSelectedDate(iso);
     applyCalendarReminderDefaults();
+    if (openDayPanel) setCalendarDayPanelOpen(true);
+    setCalendarDayFilter('');
     if (clearContext) {
       setSelectedId(null);
       setCalendarNoteText('');
@@ -1736,6 +1752,49 @@ export default function App() {
     }));
     setCalendarNoteText(content);
     setCalendarNoteTime(timeValue);
+  }
+
+  function toggleCalendarDayPanelForDate(date) {
+    if (!date) return;
+    const iso = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0).toISOString();
+    setCalendarSelectedDate(iso);
+    setCalendarDayFilter('');
+    setCalendarDayPanelOpen(prev => (String(calendarSelectedDate).slice(0, 10) === iso.slice(0, 10) ? !prev : true));
+  }
+
+  function completeCalendarDayNote(note) {
+    if (!note) return;
+    const now = new Date().toISOString();
+    setData(prev => ({
+      folders: ensureFolder(prev.folders, 'Выполнено'),
+      notes: prev.notes.map(item => (item.id === note.id ? {
+        ...item,
+        type: 'note',
+        status: 'done',
+        folder: 'Выполнено',
+        completedAt: now,
+        updatedAt: now,
+        eventAt: '',
+        dateLabel: '',
+        time: ''
+      } : item))
+    }));
+    if (selectedId === note.id) setSelectedId(null);
+    setStatusVoice(`Выполнено: ${note.title}.`, false);
+  }
+
+  function postponeCalendarDayNoteToTomorrow(note) {
+    if (!note?.eventAt) return;
+    const base = new Date(note.eventAt);
+    if (Number.isNaN(base.getTime())) return;
+    base.setDate(base.getDate() + 1);
+    updateNoteById(note.id, item => ({
+      ...item,
+      dateLabel: formatCalendarDateLabel(base),
+      eventAt: base.toISOString()
+    }));
+    selectCalendarDate(base, { openDayPanel: true });
+    setStatusVoice(`Перенесено на завтра: ${note.title}.`, false);
   }
 
   function saveCalendarNote() {
@@ -2549,11 +2608,44 @@ export default function App() {
                         onClick={() => selectCalendarDate(dayDate, { clearContext: true })}
                       >
                         <span>{dayIndex + 1}</span>
-                        {dayItems.length > 0 ? <small>{dayItems.length}</small> : null}
+                        {dayItems.length > 0 ? <small onClick={event => { event.stopPropagation(); toggleCalendarDayPanelForDate(dayDate); }}>{dayItems.length}</small> : null}
                       </button>
                     );
                   })}
                 </div>
+                {calendarDayPanelOpen &&
+                calendarSelectedDate &&
+                (() => {
+                  const panelDate = new Date(calendarSelectedDate);
+                  return panelDate.getFullYear() === month.monthDate.getFullYear() && panelDate.getMonth() === month.monthDate.getMonth();
+                })() ? (
+                  <div className="calendar-day-panel">
+                    <div className="calendar-day-panel-head">
+                      <strong>{formatCalendarDateLabel(new Date(calendarSelectedDate))}</strong>
+                      <button type="button" onClick={() => setCalendarDayPanelOpen(false)}>Свернуть</button>
+                    </div>
+                    <input
+                      className="calendar-day-filter"
+                      value={calendarDayFilter}
+                      onChange={event => setCalendarDayFilter(event.target.value)}
+                      placeholder="Фильтр по напоминаниям дня"
+                    />
+                    {filteredCalendarDayNotes.length ? filteredCalendarDayNotes.map(note => (
+                      <div key={note.id} className="calendar-day-note">
+                        <div className="calendar-day-note-main">
+                          <strong>{note.time || '--:--'} · {note.title}</strong>
+                          <span>{[note.placeLabel, note.content].filter(Boolean).join(' · ')}</span>
+                        </div>
+                        <div className="calendar-day-note-actions">
+                          <button type="button" onClick={() => openNote(note)}>Открыть</button>
+                          <button type="button" onClick={() => completeCalendarDayNote(note)}>Выполнить</button>
+                          <button type="button" onClick={() => postponeCalendarDayNoteToTomorrow(note)}>Завтра</button>
+                          <button type="button" className="danger" onClick={() => deleteNoteNow(note)}>Удалить</button>
+                        </div>
+                      </div>
+                    )) : <div className="folder-note-empty">На выбранную дату нет напоминаний</div>}
+                  </div>
+                ) : null}
                 {month.items.length ? month.items.map(note => (
                   <button type="button" key={note.id} className="calendar-item" onClick={() => openNote(note)}>
                     <strong>{note.title}</strong>

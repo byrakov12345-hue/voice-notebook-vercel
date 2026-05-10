@@ -113,11 +113,67 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   font-weight: 700;
   background: rgba(248,250,252,0.18);
   color: #e2e8f0;
+  cursor: pointer;
 }
 .calendar-day.empty { visibility: hidden; pointer-events: none; }
 .calendar-day.has-items { outline: 1px solid rgba(56,189,248,0.75); background: rgba(8,145,178,0.22); }
 .calendar-day.active { background: #f8fafc; color: #020617; font-weight: 800; }
 .calendar-day.active small { background: rgba(2,6,23,0.14); color: #020617; }
+.calendar-day-panel {
+  margin-top: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(2,6,23,0.45);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+.calendar-day-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.calendar-day-panel-head strong {
+  font-size: 14px;
+  color: #e2e8f0;
+}
+.calendar-day-filter {
+  width: 100%;
+  color: #fff;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 9px 10px;
+}
+.calendar-day-note {
+  display: grid;
+  gap: 8px;
+  border-radius: 12px;
+  background: rgba(15,23,42,0.62);
+  padding: 10px;
+}
+.calendar-day-note-main {
+  display: grid;
+  gap: 4px;
+}
+.calendar-day-note-main strong {
+  font-size: 14px;
+}
+.calendar-day-note-main span {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.calendar-day-note-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.calendar-day-note-actions button {
+  padding: 7px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+}
 .calendar-item { width: 100%; text-align: left; display: grid; gap: 4px; border-radius: 14px; background: rgba(15,23,42,0.58); }
 .calendar-item strong { font-size: 15px; }
 .calendar-item span { color: #94a3b8; font-size: 13px; }
