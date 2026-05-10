@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, ensurePushSubscriptionCached, isMobileBrowserTabMode, isNotificationSupported, queueServerPushReminderSchedule, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isMobileBrowserTabMode, isNotificationSupported, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1249,12 +1249,8 @@ export default function App() {
     let cancelled = false;
     const sync = async () => {
       if (cancelled) return;
-      await ensurePushSubscriptionCached();
-      queueServerPushReminderSchedule(data.notes, reminderSettings);
       await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
       await registerReminderRecoverySync();
-      await syncServerPushReminderScheduleInServiceWorker(data.notes, reminderSettings);
-      await syncServerPushReminderSchedule(data.notes, reminderSettings);
     };
     sync();
     const intervalId = window.setInterval(sync, 60000);
@@ -1267,27 +1263,6 @@ export default function App() {
       window.removeEventListener('focus', sync);
       window.removeEventListener('pageshow', sync);
       document.removeEventListener('visibilitychange', sync);
-    };
-  }, [data.notes, reminderSettings]);
-
-  useEffect(() => {
-    if (!reminderSettings.enabled || !isNotificationSupported() || Notification.permission !== 'granted') return undefined;
-
-    const flushOnHide = () => {
-      if (document.visibilityState !== 'hidden') return;
-      queueServerPushReminderSchedule(data.notes, reminderSettings);
-      syncServerPushReminderScheduleInServiceWorker(data.notes, reminderSettings).catch(() => {});
-    };
-    const flushOnPageHide = () => {
-      queueServerPushReminderSchedule(data.notes, reminderSettings);
-      syncServerPushReminderScheduleInServiceWorker(data.notes, reminderSettings).catch(() => {});
-    };
-
-    document.addEventListener('visibilitychange', flushOnHide);
-    window.addEventListener('pagehide', flushOnPageHide);
-    return () => {
-      document.removeEventListener('visibilitychange', flushOnHide);
-      window.removeEventListener('pagehide', flushOnPageHide);
     };
   }, [data.notes, reminderSettings]);
 
@@ -1589,27 +1564,13 @@ export default function App() {
     const syncSavedReminder = () => {
       const nextSettings = { ...reminderSettings, enabled: true };
       const notesForSync = [note, ...data.notes.filter(existing => existing.id !== note.id)];
-      ensurePushSubscriptionCached().then(() => {
-        queueServerPushReminderSchedule(notesForSync, nextSettings);
-      });
       syncServiceWorkerReminderSchedule(notesForSync, nextSettings).then(ok => {
         if (!ok) setStatusVoice('Запись сохранена. Телефон пока не подтвердил локальную память напоминания.', false);
       });
       registerReminderRecoverySync();
-      syncServerPushReminderScheduleInServiceWorker(notesForSync, nextSettings);
-      syncServerPushReminderSchedule(notesForSync, nextSettings).then(result => {
-        if (!result.ok) {
-          if (result.status === 'ios_homescreen_required') {
-            setStatusVoice('Для фоновых уведомлений на iPhone откройте блокнот с главного экрана (Add to Home Screen).', false);
-            return;
-          }
-          setStatusVoice('Запись сохранена. Серверная доставка напоминаний пока не подтвердилась.', false);
-          return;
-        }
-        if (isMobileBrowserTabMode()) {
-          setStatusVoice('Для стабильных фоновых уведомлений на телефоне откройте блокнот с главного экрана, не из вкладки браузера.', false);
-        }
-      });
+      if (isMobileBrowserTabMode()) {
+        setStatusVoice('Для стабильных фоновых уведомлений на телефоне откройте блокнот с главного экрана, не из вкладки браузера.', false);
+      }
     };
     if (Notification.permission === 'granted') {
       setReminderSettings(prev => (prev.enabled ? prev : { ...prev, enabled: true }));
@@ -2037,15 +1998,7 @@ export default function App() {
     const result = await requestNotificationPermission();
     if (result === 'granted') {
       await showServiceWorkerTestNotification();
-      await ensurePushSubscriptionCached();
-      queueServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
       await registerReminderRecoverySync();
-      const swSync = await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true });
-      const serverSync = await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
-      if (swSync?.status === 'ios_homescreen_required' || serverSync?.status === 'ios_homescreen_required') {
-        setStatusVoice('На iPhone фоновый push работает только из веб-приложения на главном экране.', false);
-        return;
-      }
       if (isMobileBrowserTabMode()) {
         setStatusVoice('Уведомления разрешены. Для стабильного фона на телефоне используйте версию с главного экрана.', false);
         return;
@@ -2064,33 +2017,19 @@ export default function App() {
     }
     setReminderSettings(prev => ({ ...prev, enabled: Boolean(result.enabled) }));
     if (result.status === 'disabled') {
-      queueServerPushReminderSchedule([], { ...reminderSettings, enabled: false });
       await syncServiceWorkerReminderSchedule([], { ...reminderSettings, enabled: false });
       await registerReminderRecoverySync();
-      await syncServerPushReminderScheduleInServiceWorker([], { ...reminderSettings, enabled: false });
-      await syncServerPushReminderSchedule([], { ...reminderSettings, enabled: false });
       return setStatusVoice('Напоминания выключены.', false);
     }
     if (result.status !== 'granted') return setStatusVoice('Разрешение на уведомления не выдано.', false);
     await showServiceWorkerTestNotification();
-    await ensurePushSubscriptionCached();
-    queueServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
     await syncServiceWorkerReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
     await registerReminderRecoverySync();
-    await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true });
-    const serverPush = await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
-    if (serverPush.status === 'ios_homescreen_required') {
-      setStatusVoice('На iPhone фоновые уведомления приходят только из версии на главном экране.', false);
-      return;
-    }
     if (isMobileBrowserTabMode()) {
       setStatusVoice('Напоминания включены. Для стабильной фоновой доставки на телефоне используйте запуск с главного экрана.', false);
       return;
     }
-    setStatusVoice(serverPush.ok
-      ? 'Напоминания включены. Серверная доставка подключена.'
-      : 'Напоминания включены локально. Для закрытого телефона нужно серверное хранилище.',
-    false);
+    setStatusVoice('Напоминания включены локально.', false);
   }
 
   async function shareNote(note) {
