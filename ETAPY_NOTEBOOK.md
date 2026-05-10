@@ -42,6 +42,8 @@
 - Vercel Hobby заблокировал минутный cron, поэтому dispatcher вынесен в GitHub Actions workflow `.github/workflows/reminders-dispatch.yml`.
 - Service worker теперь принимает push-события и показывает уведомления в верхнюю шторку телефона.
 - Production env Vercel уже содержит `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `BLOB_READ_WRITE_TOKEN`.
+- После сохранения календарной записи серверное расписание синхронизируется сразу, без ожидания фонового `useEffect`.
+- Добавлен диагностический endpoint `/api/reminders-status`: показывает количество подписок, pending/due reminders и ближайшее время без вывода приватных push-ключей.
 
 ## Следующие этапы
 
@@ -56,6 +58,7 @@
 - `src/App.jsx` — основная логика блокнота, календаря, поиска, голосовых команд и уведомлений.
 - `api/reminders-sync.js` — сохраняет push-подписку телефона и расписание напоминаний.
 - `api/reminders-dispatch.js` — cron-диспетчер серверных push-уведомлений.
+- `api/reminders-status.js` — безопасная диагностика серверного расписания.
 - `api/_push-store.js` — Vercel Blob/Redis хранилище расписаний.
 - `public/sw.js` — service worker, локальные таймеры и обработка push-событий.
 - `.github/workflows/reminders-dispatch.yml` — внешний scheduler для Vercel Hobby.

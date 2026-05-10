@@ -1561,14 +1561,26 @@ export default function App() {
   function ensureReminderReady(note) {
     if (!note || note.type !== 'appointment' || !note.eventAt) return;
     if (!isNotificationSupported()) return;
+    const syncSavedReminder = () => {
+      const nextSettings = { ...reminderSettings, enabled: true };
+      const notesForSync = [note, ...data.notes.filter(existing => existing.id !== note.id)];
+      syncServiceWorkerReminderSchedule(notesForSync, nextSettings);
+      syncServerPushReminderSchedule(notesForSync, nextSettings).then(result => {
+        if (!result.ok) {
+          setStatusVoice('Запись сохранена. Серверная доставка напоминаний пока не подтвердилась.', false);
+        }
+      });
+    };
     if (Notification.permission === 'granted') {
       setReminderSettings(prev => (prev.enabled ? prev : { ...prev, enabled: true }));
+      syncSavedReminder();
       return;
     }
     if (Notification.permission !== 'default') return;
     requestNotificationPermission().then(result => {
       if (result === 'granted') {
         setReminderSettings(prev => ({ ...prev, enabled: true }));
+        syncSavedReminder();
         setStatusVoice(`Уведомления включены для записи ${note.title}.`, false);
       } else {
         setStatusVoice('Чтобы напоминание пришло на телефон, разрешите уведомления в браузере.', false);
