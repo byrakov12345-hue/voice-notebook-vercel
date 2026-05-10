@@ -1186,6 +1186,14 @@ export default function App() {
   useEffect(() => {
     if (!isNotificationSupported()) return undefined;
     if (supportsScheduledNotifications()) return undefined;
+    if (
+      reminderSettings.enabled &&
+      typeof navigator !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      Notification.permission === 'granted'
+    ) {
+      return undefined;
+    }
     const timeouts = [];
     const emitReminder = (note, remindAt, label) => {
       const key = `${note.id}_${label}_${remindAt.toISOString()}`;

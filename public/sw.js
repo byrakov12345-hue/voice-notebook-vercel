@@ -1,5 +1,6 @@
 self.__SMART_NOTEBOOK_TIMERS__ = self.__SMART_NOTEBOOK_TIMERS__ || new Map();
 self.__SMART_NOTEBOOK_FIRED__ = self.__SMART_NOTEBOOK_FIRED__ || new Set();
+self.__SMART_NOTEBOOK_INFLIGHT__ = self.__SMART_NOTEBOOK_INFLIGHT__ || new Set();
 const REMINDER_DB_NAME = 'smart_voice_notebook_reminders_db_v1';
 const REMINDER_STORE_NAME = 'reminders';
 const REMINDER_KEEP_PAST_MS = 24 * 60 * 60 * 1000;
@@ -100,9 +101,15 @@ function notificationOptionsFromPayload(item) {
 async function showReminder(item) {
   const key = item?.key || item?.options?.tag;
   if (key && self.__SMART_NOTEBOOK_FIRED__.has(key)) return;
-  await self.registration.showNotification(item?.title || item?.options?.title || 'Напоминание', notificationOptionsFromPayload(item));
-  if (key) self.__SMART_NOTEBOOK_FIRED__.add(key);
-  await deleteStoredReminder(key);
+  if (key && self.__SMART_NOTEBOOK_INFLIGHT__.has(key)) return;
+  if (key) self.__SMART_NOTEBOOK_INFLIGHT__.add(key);
+  try {
+    await self.registration.showNotification(item?.title || item?.options?.title || 'Напоминание', notificationOptionsFromPayload(item));
+    if (key) self.__SMART_NOTEBOOK_FIRED__.add(key);
+    await deleteStoredReminder(key);
+  } finally {
+    if (key) self.__SMART_NOTEBOOK_INFLIGHT__.delete(key);
+  }
 }
 
 function scheduleReminder(item) {
