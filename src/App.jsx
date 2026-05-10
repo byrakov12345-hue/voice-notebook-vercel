@@ -1086,6 +1086,7 @@ export default function App() {
   const [calendarDayFilter, setCalendarDayFilter] = useState('');
   const [calendarNoteText, setCalendarNoteText] = useState('');
   const [calendarNoteTime, setCalendarNoteTime] = useState('09:00');
+  const [lastReminderSyncAt, setLastReminderSyncAt] = useState('');
   const [reminderSettings, setReminderSettings] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || '{}');
@@ -1251,7 +1252,8 @@ export default function App() {
     let cancelled = false;
     const sync = async () => {
       if (cancelled) return;
-      await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
+      const ok = await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
+      if (ok) setLastReminderSyncAt(new Date().toISOString());
       await registerReminderRecoverySync();
     };
     sync();
@@ -1342,6 +1344,23 @@ export default function App() {
     ].filter(Boolean).join(' ')).includes(queryText));
   }, [selectedCalendarDayNotes, calendarDayFilter]);
   const quickDateStrip = useMemo(() => buildQuickDateStrip(), []);
+  const nextReminderAtLabel = useMemo(() => {
+    if (!reminderSettings.enabled) return 'выключено';
+    const points = data.notes
+      .filter(note => note?.type === 'appointment' && note.eventAt)
+      .flatMap(note => buildReminderPoints(note, reminderSettings))
+      .map(point => point.at.getTime())
+      .filter(ts => Number.isFinite(ts) && ts > Date.now())
+      .sort((a, b) => a - b);
+    if (!points.length) return 'нет запланированных';
+    return new Date(points[0]).toLocaleString('ru-RU');
+  }, [data.notes, reminderSettings]);
+  const notificationPermissionLabel = (() => {
+    if (!isNotificationSupported() || typeof Notification === 'undefined') return 'не поддерживается';
+    if (Notification.permission === 'granted') return 'разрешено';
+    if (Notification.permission === 'denied') return 'запрещено';
+    return 'не запрошено';
+  })();
   const calendarDayPicker = useMemo(() => {
     const baseDate = calendarSelectedDate ? new Date(calendarSelectedDate) : new Date();
     const year = baseDate.getFullYear();
@@ -1579,7 +1598,11 @@ export default function App() {
       const nextSettings = { ...reminderSettings, enabled: true };
       const notesForSync = [note, ...data.notes.filter(existing => existing.id !== note.id)];
       syncServiceWorkerReminderSchedule(notesForSync, nextSettings).then(ok => {
-        if (!ok) setStatusVoice('Запись сохранена. Телефон пока не подтвердил локальную память напоминания.', false);
+        if (ok) {
+          setLastReminderSyncAt(new Date().toISOString());
+        } else {
+          setStatusVoice('Запись сохранена. Телефон пока не подтвердил локальную память напоминания.', false);
+        }
       });
       registerReminderRecoverySync();
       if (isMobileBrowserTabMode()) {
@@ -2076,13 +2099,15 @@ export default function App() {
     }
     setReminderSettings(prev => ({ ...prev, enabled: Boolean(result.enabled) }));
     if (result.status === 'disabled') {
-      await syncServiceWorkerReminderSchedule([], { ...reminderSettings, enabled: false });
+      const ok = await syncServiceWorkerReminderSchedule([], { ...reminderSettings, enabled: false });
+      if (ok) setLastReminderSyncAt(new Date().toISOString());
       await registerReminderRecoverySync();
       return setStatusVoice('Напоминания выключены.', false);
     }
     if (result.status !== 'granted') return setStatusVoice('Разрешение на уведомления не выдано.', false);
     await showServiceWorkerTestNotification();
-    await syncServiceWorkerReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
+    const ok = await syncServiceWorkerReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
+    if (ok) setLastReminderSyncAt(new Date().toISOString());
     await registerReminderRecoverySync();
     if (isMobileBrowserTabMode()) {
       setStatusVoice('Напоминания включены. Для стабильной фоновой доставки на телефоне используйте запуск с главного экрана.', false);
@@ -2571,6 +2596,11 @@ export default function App() {
                 </label>
               </div>
             </label>
+          </div>
+          <div className="reminder-diagnostics">
+            <div><span>Разрешение уведомлений</span><strong>{notificationPermissionLabel}</strong></div>
+            <div><span>Следующее локальное</span><strong>{nextReminderAtLabel}</strong></div>
+            <div><span>Последняя синхронизация SW</span><strong>{lastReminderSyncAt ? new Date(lastReminderSyncAt).toLocaleString('ru-RU') : 'еще не было'}</strong></div>
           </div>
         </section>
       ) : null}

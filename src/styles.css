@@ -41,6 +41,22 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .reminder-input-row { display: flex; gap: 10px; align-items: center; flex-wrap: nowrap; width: 100%; }
 .reminder-input-row input { flex: 1 1 auto; min-width: 0; width: 100%; }
 .reminder-input-row .switch { flex: 0 0 auto; }
+.reminder-diagnostics {
+  margin-top: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  background: rgba(2,6,23,0.35);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+.reminder-diagnostics div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.reminder-diagnostics span { color: #94a3b8; font-size: 12px; }
+.reminder-diagnostics strong { font-size: 13px; color: #e2e8f0; text-align: right; }
 .reminder-inline { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 6px; align-items: center; }
 .calendar-panel { margin-top: 14px; }
 .calendar-panel { overflow: hidden; }
@@ -295,4 +311,20 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
   .calendar-panel { padding: 14px; }
   .calendar-list { grid-auto-columns: 100%; padding-inline: 0; }
   .calendar-month { padding: 10px; }
+  .calendar-day-note-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .calendar-day-note-actions button {
+    min-height: 40px;
+    font-size: 13px;
+  }
+  .reminder-diagnostics div {
+    display: grid;
+    gap: 2px;
+  }
+  .reminder-diagnostics strong {
+    text-align: left;
+  }
 }
