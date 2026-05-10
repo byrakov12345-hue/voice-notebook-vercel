@@ -2646,31 +2646,6 @@ export default function App() {
               </button>
             </div>
           </section>
-
-          <section className="status-grid left-status">
-            <div className="status-card wide">
-              <span>Статус</span>
-              <strong>{status}</strong>
-              {suggestedFolder ? <button onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
-              <div className="quick-date-strip">
-                <button className={!quickDateFilter ? 'active' : ''} onClick={() => showQuickDate('')}>Все даты</button>
-                {quickDateStrip.map(item => (
-                  <button
-                    key={item.key}
-                    className={quickDateFilter === item.isoDay ? 'active' : ''}
-                    onClick={() => showQuickDate(item.isoDay)}
-                  >
-                    <span>{item.day}</span>
-                    <small>{item.label}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <form className="manual" onSubmit={submitManual}>
-              <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду или нажмите «Говорить»" />
-              <button className="primary">Выполнить</button>
-            </form>
-          </section>
         </aside>
 
         <section className="right-stage">
@@ -2682,6 +2657,31 @@ export default function App() {
               <button className={listening ? 'danger big' : 'primary big'} onClick={listening ? stopListening : startListening}>{listening ? 'Остановить' : 'Говорить'}</button>
             </div>
           </header>
+
+      <section className="status-grid right-status">
+        <div className="status-card wide">
+          <span>Статус</span>
+          <strong>{status}</strong>
+          {suggestedFolder ? <button onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
+          <div className="quick-date-strip">
+            <button className={!quickDateFilter ? 'active' : ''} onClick={() => showQuickDate('')}>Все даты</button>
+            {quickDateStrip.map(item => (
+              <button
+                key={item.key}
+                className={quickDateFilter === item.isoDay ? 'active' : ''}
+                onClick={() => showQuickDate(item.isoDay)}
+              >
+                <span>{item.day}</span>
+                <small>{item.label}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+        <form className="manual" onSubmit={submitManual}>
+          <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду или нажмите «Говорить»" />
+          <button className="primary">Выполнить</button>
+        </form>
+      </section>
 
       {settingsOpen ? (
         <section className="settings-panel">

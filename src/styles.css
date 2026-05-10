@@ -209,6 +209,7 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 .status-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px; margin: 18px 0; }
 .status-grid > * { min-width: 0; }
 .left-status { grid-template-columns: 1fr; margin: 0; }
+.right-status { margin: 0 0 14px; }
 .status-card, .manual { min-height: 86px; min-width: 0; padding: 16px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); background: rgba(15,23,42,0.78); }
 .status-card { overflow: hidden; }
 .status-card span { display: block; text-transform: uppercase; letter-spacing: .12em; color: #94a3b8; font-size: 12px; margin-bottom: 8px; }
@@ -306,8 +307,12 @@ button.big { min-height: 54px; padding: 14px 20px; font-weight: 800; }
 
 @media (max-width: 820px) {
   .app-shell { padding: 12px; }
-  .workspace { grid-template-columns: 1fr; }
-  .left-rail { position: static; max-height: none; overflow: visible; }
+  .workspace { grid-template-columns: 118px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .left-rail { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow: auto; }
+  .quick-panel { padding: 10px; border-radius: 18px; }
+  .quick-panel h2 { font-size: 13px; margin-bottom: 8px; }
+  .left-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .left-actions .icon-button { width: 100%; min-width: 0; min-height: 46px; font-size: 20px; }
   .hero { align-items: stretch; flex-direction: column; padding: 18px; }
   .hero-actions { justify-content: stretch; }
   .hero-actions button { flex: 1; }
