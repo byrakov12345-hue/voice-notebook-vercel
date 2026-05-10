@@ -1,3 +1,5 @@
+const PUSH_SUBSCRIPTION_STORAGE_KEY = 'smart_voice_notebook_push_subscription_v1';
+
 function parseOffsetMinutes(value, customValue = 60) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (value === '15m') return 15;
@@ -25,6 +27,31 @@ function urlBase64ToUint8Array(value) {
   const output = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
   return output;
+}
+
+function normalizePushSubscription(subscription) {
+  const value = typeof subscription?.toJSON === 'function' ? subscription.toJSON() : subscription;
+  if (!value?.endpoint || !value?.keys?.p256dh || !value?.keys?.auth) return null;
+  return value;
+}
+
+function cachePushSubscription(subscription) {
+  if (typeof window === 'undefined') return null;
+  const value = normalizePushSubscription(subscription);
+  if (!value) return null;
+  try {
+    localStorage.setItem(PUSH_SUBSCRIPTION_STORAGE_KEY, JSON.stringify(value));
+  } catch {}
+  return value;
+}
+
+function readCachedPushSubscription() {
+  if (typeof window === 'undefined') return null;
+  try {
+    return normalizePushSubscription(JSON.parse(localStorage.getItem(PUSH_SUBSCRIPTION_STORAGE_KEY) || 'null'));
+  } catch {
+    return null;
+  }
 }
 
 function normalizeReminderAt(eventAt, reminderAt, settings = {}, wasExplicit = false) {
@@ -213,6 +240,44 @@ export async function syncServerPushReminderScheduleInServiceWorker(notes = [], 
   }
 }
 
+export function queueServerPushReminderSchedule(notes = [], reminderSettings = {}) {
+  if (
+    typeof window === 'undefined' ||
+    !isNotificationSupported() ||
+    Notification.permission !== 'granted'
+  ) {
+    return false;
+  }
+
+  const subscription = readCachedPushSubscription();
+  if (!subscription) return false;
+
+  const body = JSON.stringify({
+    subscription,
+    reminders: buildReminderPayloads(notes, reminderSettings)
+  });
+
+  try {
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' });
+      if (navigator.sendBeacon('/api/reminders-sync', blob)) return true;
+    }
+  } catch {}
+
+  try {
+    fetch('/api/reminders-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      cache: 'no-store',
+      keepalive: true
+    }).catch(() => {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchPushConfig() {
   const response = await fetch('/api/push-config');
   if (!response.ok) return { serverPushReady: false };
@@ -243,12 +308,15 @@ export async function syncServerPushReminderSchedule(notes = [], reminderSetting
         applicationServerKey: urlBase64ToUint8Array(config.publicKey)
       });
     }
+    const subscriptionJson = cachePushSubscription(subscription);
 
     const response = await fetch('/api/reminders-sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      keepalive: true,
       body: JSON.stringify({
-        subscription: subscription.toJSON(),
+        subscription: subscriptionJson || subscription.toJSON(),
         reminders: buildReminderPayloads(notes, reminderSettings)
       })
     });

@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isNotificationSupported, queueServerPushReminderSchedule, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1249,6 +1249,7 @@ export default function App() {
     let cancelled = false;
     const sync = async () => {
       if (cancelled) return;
+      queueServerPushReminderSchedule(data.notes, reminderSettings);
       await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
       await syncServerPushReminderScheduleInServiceWorker(data.notes, reminderSettings);
       await syncServerPushReminderSchedule(data.notes, reminderSettings);
@@ -1565,6 +1566,7 @@ export default function App() {
     const syncSavedReminder = () => {
       const nextSettings = { ...reminderSettings, enabled: true };
       const notesForSync = [note, ...data.notes.filter(existing => existing.id !== note.id)];
+      queueServerPushReminderSchedule(notesForSync, nextSettings);
       syncServiceWorkerReminderSchedule(notesForSync, nextSettings);
       syncServerPushReminderScheduleInServiceWorker(notesForSync, nextSettings);
       syncServerPushReminderSchedule(notesForSync, nextSettings).then(result => {
@@ -1999,6 +2001,7 @@ export default function App() {
     const result = await requestNotificationPermission();
     if (result === 'granted') {
       await showServiceWorkerTestNotification();
+      queueServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
       await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true });
       await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
       setStatusVoice('Уведомления разрешены. Проверка отправлена в шторку.', false);
@@ -2015,6 +2018,7 @@ export default function App() {
     }
     setReminderSettings(prev => ({ ...prev, enabled: Boolean(result.enabled) }));
     if (result.status === 'disabled') {
+      queueServerPushReminderSchedule([], { ...reminderSettings, enabled: false });
       await syncServiceWorkerReminderSchedule([], { ...reminderSettings, enabled: false });
       await syncServerPushReminderScheduleInServiceWorker([], { ...reminderSettings, enabled: false });
       await syncServerPushReminderSchedule([], { ...reminderSettings, enabled: false });
@@ -2022,6 +2026,7 @@ export default function App() {
     }
     if (result.status !== 'granted') return setStatusVoice('Разрешение на уведомления не выдано.', false);
     await showServiceWorkerTestNotification();
+    queueServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
     await syncServiceWorkerReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
     await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true });
     const serverPush = await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });

@@ -1,4 +1,6 @@
 self.__SMART_NOTEBOOK_TIMERS__ = self.__SMART_NOTEBOOK_TIMERS__ || new Map();
+const REMINDER_DB_NAME = 'smart_voice_notebook_reminders_db_v1';
+const REMINDER_STORE_NAME = 'reminders';
 
 function urlBase64ToUint8Array(value) {
   const padding = '='.repeat((4 - value.length % 4) % 4);
@@ -7,6 +9,68 @@ function urlBase64ToUint8Array(value) {
   const output = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
   return output;
+}
+
+function openReminderDb() {
+  return new Promise((resolve, reject) => {
+    const request = self.indexedDB.open(REMINDER_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(REMINDER_STORE_NAME)) {
+        db.createObjectStore(REMINDER_STORE_NAME, { keyPath: 'key' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function withReminderStore(mode, callback) {
+  return openReminderDb().then(db => new Promise((resolve, reject) => {
+    const transaction = db.transaction(REMINDER_STORE_NAME, mode);
+    const store = transaction.objectStore(REMINDER_STORE_NAME);
+    let callbackResult;
+    transaction.oncomplete = () => {
+      db.close();
+      resolve(callbackResult);
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+    callbackResult = callback(store);
+  }));
+}
+
+async function readStoredReminders() {
+  return withReminderStore('readonly', store => new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+    request.onerror = () => reject(request.error);
+  }));
+}
+
+async function replaceStoredReminders(reminders) {
+  const items = (Array.isArray(reminders) ? reminders : [])
+    .filter(item => item?.key || item?.options?.tag)
+    .filter(item => Number(item?.at || 0) > Date.now() - 60 * 1000);
+
+  await withReminderStore('readwrite', store => {
+    store.clear();
+    items.forEach(item => store.put({
+      ...item,
+      key: item.key || item.options?.tag,
+      savedAt: new Date().toISOString()
+    }));
+  });
+  return items;
+}
+
+async function deleteStoredReminder(key) {
+  if (!key) return;
+  await withReminderStore('readwrite', store => {
+    store.delete(key);
+  });
 }
 
 function clearReminderTimers() {
@@ -27,6 +91,7 @@ function notificationOptionsFromPayload(item) {
 
 async function showReminder(item) {
   await self.registration.showNotification(item?.title || item?.options?.title || 'Напоминание', notificationOptionsFromPayload(item));
+  await deleteStoredReminder(item?.key || item?.options?.tag);
 }
 
 function scheduleReminder(item) {
@@ -45,6 +110,18 @@ function scheduleReminder(item) {
     showReminder(item).catch(() => {});
   }, Math.min(delay, 2147483647));
   self.__SMART_NOTEBOOK_TIMERS__.set(key, timerId);
+}
+
+async function syncLocalReminders(reminders) {
+  clearReminderTimers();
+  const storedReminders = await replaceStoredReminders(reminders);
+  storedReminders.forEach(scheduleReminder);
+}
+
+async function restoreStoredReminders() {
+  const reminders = await readStoredReminders();
+  clearReminderTimers();
+  reminders.forEach(scheduleReminder);
 }
 
 async function syncServerReminders(reminders) {
@@ -77,14 +154,17 @@ self.addEventListener('install', () => {
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(Promise.all([
+    self.clients.claim(),
+    restoreStoredReminders().catch(() => {})
+  ]));
 });
 
 self.addEventListener('message', event => {
   const data = event.data || {};
   if (data.type === 'smart-notebook-sync-reminders') {
-    clearReminderTimers();
-    (data.reminders || []).forEach(scheduleReminder);
+    const syncPromise = syncLocalReminders(data.reminders || []).catch(() => {});
+    if (typeof event.waitUntil === 'function') event.waitUntil(syncPromise);
   }
   if (data.type === 'smart-notebook-sync-server-reminders') {
     const syncPromise = syncServerReminders(data.reminders || []).catch(() => {});
@@ -103,6 +183,18 @@ self.addEventListener('message', event => {
   }
 });
 
+self.addEventListener('sync', event => {
+  if (event.tag === 'smart-notebook-restore-reminders') {
+    event.waitUntil(restoreStoredReminders().catch(() => {}));
+  }
+});
+
+self.addEventListener('periodicsync', event => {
+  if (event.tag === 'smart-notebook-restore-reminders') {
+    event.waitUntil(restoreStoredReminders().catch(() => {}));
+  }
+});
+
 self.addEventListener('push', event => {
   let payload = {};
   try {
@@ -113,6 +205,7 @@ self.addEventListener('push', event => {
   event.waitUntil(showReminder({
     title: payload.title,
     options: payload.options || {},
+    key: payload.options?.tag || null,
     noteId: payload.options?.data?.noteId || null,
     label: payload.options?.data?.pointLabel || 'primary'
   }));
