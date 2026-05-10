@@ -148,24 +148,7 @@ export async function syncServiceWorkerReminderSchedule(notes = [], reminderSett
     const target = navigator.serviceWorker.controller || registration.active || registration.waiting || registration.installing;
     if (!target?.postMessage) return false;
 
-    const reminders = [];
-    notes
-      .filter(note => note?.type === 'appointment' && note.eventAt)
-      .forEach(note => {
-        buildReminderPoints(note, reminderSettings)
-          .filter(point => point.at.getTime() > Date.now())
-          .forEach(point => {
-            const options = buildNotificationOptions(note, point.label);
-            reminders.push({
-              key: options.tag,
-              at: point.at.getTime(),
-              title: note.title || 'Напоминание',
-              noteId: note.id,
-              label: point.label,
-              options
-            });
-          });
-      });
+    const reminders = buildReminderPayloads(notes, reminderSettings);
 
     target.postMessage({ type: 'smart-notebook-sync-reminders', reminders });
     return true;
@@ -174,7 +157,7 @@ export async function syncServiceWorkerReminderSchedule(notes = [], reminderSett
   }
 }
 
-function buildReminderPayloads(notes = [], reminderSettings = {}) {
+export function buildReminderPayloads(notes = [], reminderSettings = {}) {
   const reminders = [];
   notes
     .filter(note => note?.type === 'appointment' && note.eventAt)
@@ -194,6 +177,32 @@ function buildReminderPayloads(notes = [], reminderSettings = {}) {
         });
     });
   return reminders;
+}
+
+export async function syncServerPushReminderScheduleInServiceWorker(notes = [], reminderSettings = {}) {
+  if (
+    typeof window === 'undefined' ||
+    !('serviceWorker' in navigator) ||
+    !('PushManager' in window) ||
+    !isNotificationSupported() ||
+    Notification.permission !== 'granted'
+  ) {
+    return { ok: false, status: 'unsupported' };
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const target = navigator.serviceWorker.controller || registration.active || registration.waiting || registration.installing;
+    if (!target?.postMessage) return { ok: false, status: 'service_worker_missing' };
+
+    target.postMessage({
+      type: 'smart-notebook-sync-server-reminders',
+      reminders: buildReminderPayloads(notes, reminderSettings)
+    });
+    return { ok: true, status: 'queued' };
+  } catch (error) {
+    return { ok: false, status: error?.message || 'queue_failed' };
+  }
 }
 
 async function fetchPushConfig() {
