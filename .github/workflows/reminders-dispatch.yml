@@ -1,0 +1,17 @@
+name: Dispatch reminders
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0-59/5 * * * *'
+    - cron: '1-59/5 * * * *'
+    - cron: '2-59/5 * * * *'
+    - cron: '3-59/5 * * * *'
+    - cron: '4-59/5 * * * *'
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reminder dispatcher
+        run: curl -fsS --retry 2 --max-time 20 https://voice-notebook-vercel.vercel.app/api/reminders-dispatch

@@ -39,7 +39,7 @@
 - Напоминания получили resume-проверку после возврата в открытую вкладку, чтобы не терять ближайшее уведомление при фоне/сне браузера.
 - Добавлен Web Push слой для закрытой страницы: `api/push-config.js`, `api/reminders-sync.js`, `api/reminders-dispatch.js`.
 - Подключено серверное хранилище расписаний через Vercel Blob (`BLOB_READ_WRITE_TOKEN`) с fallback на Upstash Redis REST.
-- Добавлен Vercel Cron `/api/reminders-dispatch` каждую минуту.
+- Vercel Hobby заблокировал минутный cron, поэтому dispatcher вынесен в GitHub Actions workflow `.github/workflows/reminders-dispatch.yml`.
 - Service worker теперь принимает push-события и показывает уведомления в верхнюю шторку телефона.
 - Production env Vercel уже содержит `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `BLOB_READ_WRITE_TOKEN`.
 
@@ -58,6 +58,7 @@
 - `api/reminders-dispatch.js` — cron-диспетчер серверных push-уведомлений.
 - `api/_push-store.js` — Vercel Blob/Redis хранилище расписаний.
 - `public/sw.js` — service worker, локальные таймеры и обработка push-событий.
+- `.github/workflows/reminders-dispatch.yml` — внешний scheduler для Vercel Hobby.
 - `src/lib/voiceCalendar.js` — вынос дат, времени, calendar-target и reminder voice-парсинга.
 - `scripts/voice-smoke.mjs` — сценарная проверка ключевых голосовых фраз.
 - `TEST_PLAN.md` — сценарии ручной проверки.

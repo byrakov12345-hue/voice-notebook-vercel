@@ -12,7 +12,7 @@
 - контакты с кнопками позвонить/написать;
 - календарь на 5 лет вперёд с записями по датам;
 - локальные напоминания через service worker;
-- серверные push-напоминания через Vercel Cron + Vercel Blob, чтобы уведомления приходили после закрытия страницы;
+- серверные push-напоминания через Web Push + Vercel Blob + GitHub Actions scheduler, чтобы уведомления приходили после закрытия страницы;
 - поделиться, копировать, удалить сразу или по номеру;
 - хранение в localStorage.
 
@@ -47,7 +47,8 @@
 - проект закреплён под `Node 22.x`;
 - lockfile хранится, потому что проект использует серверные зависимости `web-push` и `@vercel/blob`;
 - для push при закрытой странице нужны production env: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `BLOB_READ_WRITE_TOKEN`;
-- cron endpoint: `/api/reminders-dispatch`.
+- dispatcher endpoint: `/api/reminders-dispatch`;
+- Vercel Hobby не разрешает минутный cron, поэтому расписание вызывает GitHub Actions workflow `.github/workflows/reminders-dispatch.yml`.
 
 OPENAI_API_KEY не нужен.
 
