@@ -54,6 +54,24 @@ function readCachedPushSubscription() {
   }
 }
 
+function postServiceWorkerMessage(target, message, timeoutMs = 2500) {
+  if (!target?.postMessage) return Promise.resolve(null);
+  if (typeof MessageChannel === 'undefined') {
+    target.postMessage(message);
+    return Promise.resolve(null);
+  }
+
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    const timeoutId = window.setTimeout(() => resolve(null), timeoutMs);
+    channel.port1.onmessage = event => {
+      window.clearTimeout(timeoutId);
+      resolve(event.data || null);
+    };
+    target.postMessage(message, [channel.port2]);
+  });
+}
+
 function normalizeReminderAt(eventAt, reminderAt, settings = {}, wasExplicit = false) {
   if (!(reminderAt instanceof Date) || Number.isNaN(reminderAt.getTime())) return null;
   if (wasExplicit) return reminderAt;
@@ -171,14 +189,24 @@ export async function syncServiceWorkerReminderSchedule(notes = [], reminderSett
   }
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const controlledWorker = navigator.serviceWorker.controller;
+    if (controlledWorker?.postMessage) {
+      const reply = await postServiceWorkerMessage(controlledWorker, {
+        type: 'smart-notebook-sync-reminders',
+        reminders: buildReminderPayloads(notes, reminderSettings)
+      });
+      return reply ? Boolean(reply.ok) : true;
+    }
+
+    const registration = await navigator.serviceWorker.getRegistration() || await navigator.serviceWorker.ready;
     const target = navigator.serviceWorker.controller || registration.active || registration.waiting || registration.installing;
     if (!target?.postMessage) return false;
 
-    const reminders = buildReminderPayloads(notes, reminderSettings);
-
-    target.postMessage({ type: 'smart-notebook-sync-reminders', reminders });
-    return true;
+    const reply = await postServiceWorkerMessage(target, {
+      type: 'smart-notebook-sync-reminders',
+      reminders: buildReminderPayloads(notes, reminderSettings)
+    });
+    return reply ? Boolean(reply.ok) : true;
   } catch {
     return false;
   }
@@ -224,8 +252,8 @@ export async function syncServerPushReminderScheduleInServiceWorker(notes = [], 
   };
   const controlledWorker = navigator.serviceWorker.controller;
   if (controlledWorker?.postMessage) {
-    controlledWorker.postMessage(message);
-    return { ok: true, status: 'queued' };
+    const reply = await postServiceWorkerMessage(controlledWorker, message, 4000);
+    return reply || { ok: true, status: 'queued' };
   }
 
   try {
@@ -233,11 +261,23 @@ export async function syncServerPushReminderScheduleInServiceWorker(notes = [], 
     const target = navigator.serviceWorker.controller || registration.active || registration.waiting || registration.installing;
     if (!target?.postMessage) return { ok: false, status: 'service_worker_missing' };
 
-    target.postMessage(message);
-    return { ok: true, status: 'queued' };
+    const reply = await postServiceWorkerMessage(target, message, 4000);
+    return reply || { ok: true, status: 'queued' };
   } catch (error) {
     return { ok: false, status: error?.message || 'queue_failed' };
   }
+}
+
+export async function registerReminderRecoverySync() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return false;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    if (registration.sync?.register) {
+      await registration.sync.register('smart-notebook-restore-reminders');
+      return true;
+    }
+  } catch {}
+  return false;
 }
 
 export function queueServerPushReminderSchedule(notes = [], reminderSettings = {}) {

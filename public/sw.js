@@ -78,6 +78,11 @@ function clearReminderTimers() {
   self.__SMART_NOTEBOOK_TIMERS__.clear();
 }
 
+function postMessageReply(event, payload) {
+  const port = event?.ports?.[0];
+  if (port?.postMessage) port.postMessage(payload);
+}
+
 function notificationOptionsFromPayload(item) {
   return {
     body: item?.options?.body || '',
@@ -116,20 +121,24 @@ async function syncLocalReminders(reminders) {
   clearReminderTimers();
   const storedReminders = await replaceStoredReminders(reminders);
   storedReminders.forEach(scheduleReminder);
+  return storedReminders;
 }
 
 async function restoreStoredReminders() {
   const reminders = await readStoredReminders();
   clearReminderTimers();
   reminders.forEach(scheduleReminder);
+  return reminders;
 }
 
 async function syncServerReminders(reminders) {
   const configResponse = await fetch('/api/push-config', { cache: 'no-store' });
-  if (!configResponse.ok) return;
+  if (!configResponse.ok) return { ok: false, status: `push_config_${configResponse.status}` };
 
   const config = await configResponse.json();
-  if (!config?.vapidConfigured || !config?.storageConfigured || !config?.publicKey) return;
+  if (!config?.vapidConfigured || !config?.storageConfigured || !config?.publicKey) {
+    return { ok: false, status: 'push_not_configured' };
+  }
 
   let subscription = await self.registration.pushManager.getSubscription();
   if (!subscription) {
@@ -139,14 +148,18 @@ async function syncServerReminders(reminders) {
     });
   }
 
-  await fetch('/api/reminders-sync', {
+  const response = await fetch('/api/reminders-sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
     body: JSON.stringify({
       subscription: subscription.toJSON(),
       reminders: Array.isArray(reminders) ? reminders : []
     })
   });
+  if (!response.ok) return { ok: false, status: `sync_${response.status}` };
+  const payload = await response.json().catch(() => ({}));
+  return { ok: true, status: 'synced', reminders: payload.reminders || 0 };
 }
 
 self.addEventListener('install', () => {
@@ -163,11 +176,31 @@ self.addEventListener('activate', event => {
 self.addEventListener('message', event => {
   const data = event.data || {};
   if (data.type === 'smart-notebook-sync-reminders') {
-    const syncPromise = syncLocalReminders(data.reminders || []).catch(() => {});
+    const syncPromise = syncLocalReminders(data.reminders || [])
+      .then(reminders => postMessageReply(event, {
+        type: 'smart-notebook-sync-reminders-result',
+        ok: true,
+        reminders: reminders.length,
+        nextAt: reminders[0]?.at || null
+      }))
+      .catch(error => postMessageReply(event, {
+        type: 'smart-notebook-sync-reminders-result',
+        ok: false,
+        status: error?.message || 'local_sync_failed'
+      }));
     if (typeof event.waitUntil === 'function') event.waitUntil(syncPromise);
   }
   if (data.type === 'smart-notebook-sync-server-reminders') {
-    const syncPromise = syncServerReminders(data.reminders || []).catch(() => {});
+    const syncPromise = syncServerReminders(data.reminders || [])
+      .then(result => postMessageReply(event, {
+        type: 'smart-notebook-sync-server-reminders-result',
+        ...result
+      }))
+      .catch(error => postMessageReply(event, {
+        type: 'smart-notebook-sync-server-reminders-result',
+        ok: false,
+        status: error?.message || 'server_sync_failed'
+      }));
     if (typeof event.waitUntil === 'function') event.waitUntil(syncPromise);
   }
   if (data.type === 'smart-notebook-test-notification') {
