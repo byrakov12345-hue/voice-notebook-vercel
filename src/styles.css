@@ -394,3 +394,272 @@ p { color: var(--text-soft); line-height: 1.55; }
   .folder-note-delete { grid-column: 3; }
   .mic-button { min-height: 142px; }
 }
+
+/* Polished compact layout */
+.mobile-dock { display: none; }
+.panel {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.035)),
+    rgba(8, 13, 31, 0.82);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+.brand-panel {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+.brand-panel .left-actions { grid-column: 1 / -1; }
+.brand-panel p:last-of-type { margin-bottom: 0; }
+.tool-button, .folder, .folder-trigger, .voice-option, .voice-style-option {
+  background: rgba(15, 23, 42, 0.58);
+}
+.note-card {
+  background:
+    linear-gradient(145deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.54)),
+    radial-gradient(circle at 100% 0%, rgba(103, 232, 249, 0.10), transparent 40%);
+}
+.mic-button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+.mic-button::before,
+.mic-button::after {
+  content: '';
+  position: absolute;
+  inset: 18px;
+  border-radius: 30px;
+  pointer-events: none;
+  z-index: -1;
+}
+.mic-button::before {
+  background: radial-gradient(circle, rgba(248, 250, 252, 0.24), transparent 58%);
+  transform: scale(0.85);
+  opacity: 0.86;
+}
+.mic-button::after {
+  border: 1px solid rgba(248, 250, 252, 0.26);
+  opacity: 0.44;
+}
+.mic-button span,
+.mic-button strong { position: relative; z-index: 1; }
+.mic-button span {
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.mic-button:hover span { transform: scale(1.04); }
+.mic-button.listening::before { animation: micGlow 1.2s ease-in-out infinite; }
+.mic-button.listening::after { animation: micRing 1.2s ease-out infinite; }
+.mic-button.listening span { animation: micDot 0.72s ease-in-out infinite alternate; }
+@keyframes micGlow {
+  0%, 100% { opacity: 0.42; transform: scale(0.82); }
+  50% { opacity: 0.92; transform: scale(1.05); }
+}
+@keyframes micRing {
+  0% { opacity: 0.55; transform: scale(0.84); }
+  100% { opacity: 0; transform: scale(1.18); }
+}
+@keyframes micDot {
+  from { box-shadow: 0 0 30px rgba(248, 250, 252, 0.28), 0 0 0 0 rgba(248, 113, 113, 0.22); }
+  to { box-shadow: 0 0 48px rgba(248, 250, 252, 0.44), 0 0 0 16px rgba(248, 113, 113, 0.08); }
+}
+
+@media (max-width: 920px) {
+  html, body, #root { height: 100%; }
+  body { overflow: hidden; }
+  .app-shell {
+    width: 100%;
+    max-width: 620px;
+    height: 100dvh;
+    min-height: 100svh;
+    padding: 10px 10px 86px;
+    overflow: hidden;
+  }
+  .future-backdrop { opacity: 0.72; }
+  .future-workspace {
+    display: block;
+    height: 100%;
+  }
+  .left-command-panel,
+  .right-ai-panel,
+  .center-notebook {
+    display: contents;
+  }
+  .mobile-brand { display: none !important; }
+  .mobile-panel { display: none !important; }
+  .mobile-panel.mobile-active {
+    display: grid !important;
+    height: calc(100dvh - 104px);
+    min-height: calc(100svh - 104px);
+    max-height: calc(100dvh - 104px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 24px;
+    padding: 14px;
+  }
+  .notes.mobile-active {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+  }
+  .folders.mobile-active,
+  .settings-panel.mobile-active,
+  .ai-comm-panel.mobile-active,
+  .calendar-panel.mobile-active {
+    align-content: start;
+  }
+  .ai-comm-panel.mobile-active {
+    grid-template-rows: auto auto auto auto min-content;
+  }
+  .settings-panel.compact.mobile-active {
+    grid-template-rows: auto auto;
+  }
+  .settings-panel.mobile-active .voice-list {
+    max-height: 28dvh;
+  }
+  .notes-head {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .notes-head h2,
+  .ai-panel-head h2 { font-size: 24px; }
+  .history-chips {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .history-chips button { padding: 9px 6px; }
+  .selected-strip {
+    padding: 10px;
+    gap: 8px;
+  }
+  .selected-strip div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .note-list {
+    min-height: 0;
+    overflow: auto;
+    padding-right: 2px;
+  }
+  .note-main { padding: 13px; }
+  .note-card h3 { font-size: 18px; }
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0 13px 13px;
+  }
+  .folders-head > span {
+    min-width: 36px;
+    height: 36px;
+  }
+  .folder-row {
+    grid-template-columns: minmax(0, 1fr) 82px;
+  }
+  .folder-controls button,
+  .folder-note-expand,
+  .folder-note-delete,
+  .folder-note-copy-button {
+    width: 36px;
+    min-width: 36px;
+  }
+  .folder-notes {
+    padding-left: 6px;
+  }
+  .manual {
+    grid-template-columns: 1fr;
+  }
+  .manual input,
+  .manual button { width: 100%; }
+  .mic-button {
+    min-height: clamp(152px, 36dvh, 248px);
+    border-radius: 30px;
+  }
+  .mic-button span {
+    width: 82px;
+    height: 82px;
+  }
+  .status-card {
+    max-height: 20dvh;
+    overflow: auto;
+  }
+  .quick-date-strip {
+    grid-auto-columns: minmax(74px, 88px);
+    padding-bottom: 2px;
+  }
+  .calendar-compose-row,
+  .calendar-compose-main,
+  .compact-date-row {
+    grid-template-columns: 1fr;
+  }
+  .calendar-list {
+    grid-auto-columns: minmax(286px, 100%);
+    padding-bottom: 6px;
+  }
+  .calendar-month {
+    max-height: calc(100dvh - 238px);
+    overflow: auto;
+  }
+  .calendar-day {
+    min-height: 38px;
+    border-radius: 12px;
+  }
+  .calendar-item {
+    padding: 9px 10px;
+  }
+  .calendar-day-note-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mobile-dock {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    padding: 7px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 24px;
+    background:
+      linear-gradient(145deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.90)),
+      rgba(2, 6, 23, 0.92);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(18px);
+  }
+  .mobile-dock button {
+    min-height: 54px;
+    padding: 6px 3px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    gap: 2px;
+    font-size: 11px;
+    background: rgba(15, 23, 42, 0.72);
+  }
+  .mobile-dock button span {
+    font-size: 16px;
+    line-height: 1;
+  }
+  .mobile-dock button strong {
+    font-size: 10.5px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .mobile-dock button.active {
+    color: #020617;
+    background: linear-gradient(135deg, #f8fafc, #bae6fd);
+    border-color: rgba(255, 255, 255, 0.52);
+    box-shadow: 0 8px 28px rgba(103, 232, 249, 0.18);
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell { padding-left: 8px; padding-right: 8px; }
+  .mobile-dock { left: 8px; right: 8px; gap: 4px; padding: 6px; border-radius: 22px; }
+  .mobile-dock button { min-height: 50px; border-radius: 16px; }
+  .mobile-dock button strong { font-size: 9.5px; }
+  .mobile-panel.mobile-active { height: calc(100dvh - 100px); max-height: calc(100dvh - 100px); }
+  .folder-note-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .folder-note-delete { grid-column: 3; }
+}

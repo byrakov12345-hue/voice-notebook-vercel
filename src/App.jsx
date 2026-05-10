@@ -1111,6 +1111,7 @@ export default function App() {
   const [expandedFolders, setExpandedFolders] = useState({});
   const [expandedNotes, setExpandedNotes] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState('voice');
   const [voiceOptions, setVoiceOptions] = useState([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
   const [selectedVoiceStyle, setSelectedVoiceStyle] = useState('default');
@@ -1452,6 +1453,7 @@ export default function App() {
 
   function openFolder(folderName, voice = true) {
     if (!folderName) return setStatusVoice('Не понял, какую папку открыть.', voice);
+    setMobilePanel('folders');
     setSelectedFolder(folderName);
     setSelectedId(null);
     setQuery('');
@@ -1658,6 +1660,7 @@ export default function App() {
     lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
+    if (showAfterSave) setMobilePanel('notes');
     setSuggestedFolder('');
     setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
     ensureReminderReady(note);
@@ -1738,6 +1741,7 @@ export default function App() {
   }
 
   function openNote(note) {
+    setMobilePanel('notes');
     setSelectedId(note.id);
     setSelectedFolder(note.folder);
     if (note.type === 'appointment' && note.eventAt) loadNoteIntoCalendar(note);
@@ -1745,6 +1749,7 @@ export default function App() {
   }
 
   function performSearch(text) {
+    setMobilePanel('notes');
     const results = searchNotes(data.notes, text);
     setQuery(text);
     setSelectedFolder('Все');
@@ -2524,7 +2529,7 @@ export default function App() {
       }
       if (!parseVoiceCalendarTargetDate(spoken) && includesAny(source, ['открой календарь', 'покажи календарь', 'разверни календарь', 'календарь справа'])) {
         setCalendarOpen(true);
-        setStatusVoice('Календарь открыт справа.', false);
+        setStatusVoice('Календарь открыт.', false);
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return;
       }
@@ -2536,7 +2541,7 @@ export default function App() {
       }
       if (includesAny(source, ['открой настройки', 'покажи настройки', 'настройки голоса', 'настройки уведомлений'])) {
         setSettingsOpen(true);
-        setStatusVoice('Панель настроек открыта слева.', false);
+        setStatusVoice('Настройки открыты.', false);
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return;
       }
@@ -2719,33 +2724,39 @@ export default function App() {
     processCommand(text);
   }
 
+  function selectMobilePanel(panel) {
+    setMobilePanel(panel);
+    if (panel === 'calendar') setCalendarOpen(true);
+    if (panel === 'settings') setSettingsOpen(true);
+  }
+
   return (
     <div className="app-shell">
       <div className="future-backdrop" aria-hidden="true" />
       <div className="future-workspace">
         <aside className="left-command-panel" aria-label="Функции блокнота">
-          <section className="panel brand-panel">
+          <section className="panel brand-panel mobile-panel mobile-brand">
             <div className="brand-mark">AI</div>
             <div>
-              <p className="eyebrow">Блокнот будущего</p>
+              <p className="eyebrow">АИ Блокнот</p>
               <h1>АИ Блокнот</h1>
-              <p>Команды, папки, голос, уведомления и настройки собраны слева. Рабочие записи в центре. Микрофон и календарь закреплены справа.</p>
+              <p>Голосовые записи, папки, календарь и напоминания в одном компактном рабочем месте.</p>
             </div>
             <div className="left-actions">
-              <button type="button" className="tool-button" onClick={() => setSettingsOpen(value => !value)}>
-                {settingsOpen ? 'Скрыть настройки' : 'Настройки голоса'}
+              <button type="button" className="tool-button" onClick={() => { setSettingsOpen(value => !value); selectMobilePanel('settings'); }}>
+                {settingsOpen ? 'Скрыть настройки' : 'Настройки'}
               </button>
-              <button type="button" className="tool-button" onClick={() => setCalendarOpen(value => !value)}>
-                {calendarOpen ? 'Свернуть календарь' : 'Календарь справа'}
+              <button type="button" className="tool-button" onClick={() => { setCalendarOpen(value => !value); selectMobilePanel('calendar'); }}>
+                {calendarOpen ? 'Свернуть календарь' : 'Календарь'}
               </button>
-              <button type="button" className="tool-button" onClick={enableNotifications}>Проверить шторку</button>
+              <button type="button" className="tool-button" onClick={enableNotifications}>Тест уведомления</button>
             </div>
           </section>
 
-          <section className={settingsOpen ? 'panel settings-panel expanded' : 'panel settings-panel compact'}>
+          <section className={`${settingsOpen ? 'panel settings-panel expanded' : 'panel settings-panel compact'} mobile-panel ${mobilePanel === 'settings' ? 'mobile-active' : ''}`}>
             <div className="settings-head">
               <div>
-                <p className="eyebrow">Голос и память</p>
+                <p className="eyebrow">Настройки</p>
                 <strong>Настройки помощника</strong>
               </div>
               <button type="button" onClick={() => setSettingsOpen(value => !value)}>{settingsOpen ? 'Свернуть' : 'Открыть'}</button>
@@ -2843,10 +2854,10 @@ export default function App() {
             ) : null}
           </section>
 
-          <section className="panel folders">
+          <section className={`panel folders mobile-panel ${mobilePanel === 'folders' ? 'mobile-active' : ''}`}>
             <div className="folders-head">
               <div>
-                <p className="eyebrow">Функционал слева</p>
+                <p className="eyebrow">Разделы</p>
                 <h2>Папки</h2>
               </div>
               <span>{data.notes.length}</span>
@@ -2964,10 +2975,10 @@ export default function App() {
         </aside>
 
         <main className="center-notebook" aria-label="Записи блокнота">
-          <section className="panel notes">
+          <section className={`panel notes mobile-panel ${mobilePanel === 'notes' ? 'mobile-active' : ''}`}>
             <div className="notes-head">
               <div>
-                <p className="eyebrow">Рабочая область</p>
+                <p className="eyebrow">Записи</p>
                 <h2>{selectedFolder}</h2>
                 <p>{visibleNotes.length} записей{selectedNote ? ` · открыта №${selectedNoteIndex + 1}` : ''}</p>
               </div>
@@ -3002,17 +3013,17 @@ export default function App() {
                   onCall={callNote}
                   onMessage={messageNote}
                 />
-              )) : <div className="empty">Записей пока нет. Скажите команду справа или напишите её в поле микрофона.</div>}
+              )) : <div className="empty">Записей пока нет. Нажмите «Говорить» или введите команду.</div>}
             </div>
           </section>
         </main>
 
         <aside className="right-ai-panel" aria-label="Микрофон и календарь">
-          <section className="panel ai-comm-panel">
+          <section className={`panel ai-comm-panel mobile-panel ${mobilePanel === 'voice' ? 'mobile-active' : ''}`}>
             <div className="ai-panel-head">
               <div>
-                <p className="eyebrow">Общение с блокнотом</p>
-                <h2>Микрофон справа</h2>
+                <p className="eyebrow">Команды</p>
+                <h2>Голос</h2>
               </div>
               <span className={listening ? 'live-dot active' : 'live-dot'} />
             </div>
@@ -3031,7 +3042,7 @@ export default function App() {
               {suggestedFolder ? <button type="button" onClick={() => openFolder(suggestedFolder, false)}>Открыть папку {suggestedFolder}</button> : null}
             </div>
             <form className="manual" onSubmit={submitManual}>
-              <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Команда: запомни, найди, напомни, открой календарь" />
+              <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду" />
               <button type="submit" className="primary">Выполнить</button>
             </form>
             <div className="quick-date-strip">
@@ -3051,10 +3062,10 @@ export default function App() {
           </section>
 
           {calendarOpen ? (
-            <section className="panel calendar-panel">
+            <section className={`panel calendar-panel mobile-panel ${mobilePanel === 'calendar' ? 'mobile-active' : ''}`}>
               <div className="settings-head">
                 <div>
-                  <p className="eyebrow">Календарь справа</p>
+                  <p className="eyebrow">Календарь</p>
                   <strong>Дата и уведомления</strong>
                 </div>
                 <button type="button" onClick={() => setCalendarOpen(false)}>Свернуть</button>
@@ -3141,13 +3152,35 @@ export default function App() {
               </div>
             </section>
           ) : (
-            <section className="panel calendar-panel calendar-collapsed">
-              <p className="eyebrow">Календарь справа</p>
+            <section className={`panel calendar-panel calendar-collapsed mobile-panel ${mobilePanel === 'calendar' ? 'mobile-active' : ''}`}>
+              <p className="eyebrow">Календарь</p>
               <button type="button" className="primary" onClick={() => setCalendarOpen(true)}>Открыть календарь</button>
             </section>
           )}
         </aside>
       </div>
+      <nav className="mobile-dock" aria-label="Быстрая навигация">
+        <button type="button" className={mobilePanel === 'folders' ? 'active' : ''} onClick={() => selectMobilePanel('folders')}>
+          <span>☰</span>
+          <strong>Папки</strong>
+        </button>
+        <button type="button" className={mobilePanel === 'notes' ? 'active' : ''} onClick={() => selectMobilePanel('notes')}>
+          <span>✎</span>
+          <strong>Записи</strong>
+        </button>
+        <button type="button" className={mobilePanel === 'voice' ? 'active' : ''} onClick={() => selectMobilePanel('voice')}>
+          <span>●</span>
+          <strong>Голос</strong>
+        </button>
+        <button type="button" className={mobilePanel === 'calendar' ? 'active' : ''} onClick={() => selectMobilePanel('calendar')}>
+          <span>31</span>
+          <strong>Календарь</strong>
+        </button>
+        <button type="button" className={mobilePanel === 'settings' ? 'active' : ''} onClick={() => selectMobilePanel('settings')}>
+          <span>⚙</span>
+          <strong>Настр.</strong>
+        </button>
+      </nav>
     </div>
   );
 

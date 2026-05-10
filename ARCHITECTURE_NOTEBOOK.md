@@ -17,7 +17,7 @@
 ## Логика уведомлений
 
 1. Запись типа `appointment` получает `eventAt`, `reminderExplicitAt`, настройки первого/второго уведомления.
-2. `buildReminderPoints` строит будущие точки уведомления.
+2. `buildReminderPoints` строит следующие точки уведомления.
 3. `syncServiceWorkerReminderSchedule` отправляет payload в service worker.
 4. `public/sw.js` сохраняет payload в IndexedDB телефона и ставит таймеры.
 5. При клике уведомление открывает приложение и передаёт `noteId` в UI.
