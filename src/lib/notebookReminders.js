@@ -190,15 +190,23 @@ export async function syncServerPushReminderScheduleInServiceWorker(notes = [], 
     return { ok: false, status: 'unsupported' };
   }
 
+  const reminders = buildReminderPayloads(notes, reminderSettings);
+  const message = {
+    type: 'smart-notebook-sync-server-reminders',
+    reminders
+  };
+  const controlledWorker = navigator.serviceWorker.controller;
+  if (controlledWorker?.postMessage) {
+    controlledWorker.postMessage(message);
+    return { ok: true, status: 'queued' };
+  }
+
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await navigator.serviceWorker.getRegistration() || await navigator.serviceWorker.ready;
     const target = navigator.serviceWorker.controller || registration.active || registration.waiting || registration.installing;
     if (!target?.postMessage) return { ok: false, status: 'service_worker_missing' };
 
-    target.postMessage({
-      type: 'smart-notebook-sync-server-reminders',
-      reminders: buildReminderPayloads(notes, reminderSettings)
-    });
+    target.postMessage(message);
     return { ok: true, status: 'queued' };
   } catch (error) {
     return { ok: false, status: error?.message || 'queue_failed' };
