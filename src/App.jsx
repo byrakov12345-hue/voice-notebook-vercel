@@ -418,6 +418,19 @@ function cleanTitle(text, fallback = 'Заметка') {
   return value ? capitalize(value.slice(0, 80)) : fallback;
 }
 
+function normalizeCalendarReminderText(text) {
+  return normalize(String(text || '')
+    .replace(/^(запомни|запиши|сохрани|добавь)\s*/i, '')
+    .replace(/^\s*в\s+\d{1,2}[:.]\d{2}\s*/i, '')
+    .trim());
+}
+
+function buildCalendarReminderTitle(text) {
+  const normalizedText = normalizeCalendarReminderText(text);
+  if (!normalizedText) return 'Напоминание';
+  return cleanTitle(normalizedText, 'Напоминание');
+}
+
 function resolveExplicitFolderName(rawName) {
   const clean = normalize(rawName).replace(/[^a-zа-я0-9 -]/gi, '').trim();
   if (!clean) return '';
@@ -1765,7 +1778,7 @@ export default function App() {
     updateNoteById(noteId, note => ({
       ...note,
       folder,
-      title: cleanTitle(content, note.title || 'Напоминание'),
+      title: buildCalendarReminderTitle(content),
       content,
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: timeValue,
@@ -1842,11 +1855,37 @@ export default function App() {
     const type = inferType(content);
     const folder = resolveFolderName(content, type === 'note' ? 'appointment' : type);
     const appointmentMeta = extractAppointmentMeta(content);
+    const dayItems = notesForCalendarDate(calendarSelectedDate);
+    const normalizedContent = normalizeCalendarReminderText(content);
+    const isShoppingText = inferType(content) === 'shopping_list';
+    const sameDayExisting = dayItems.find(item => normalizeCalendarReminderText(item.content || '') === normalizedContent)
+      || dayItems.find(item => String(item.time || '') === noteTime && normalize(item.title || '') === normalize('Еда'))
+      || (isShoppingText ? dayItems.find(item => normalize(item.title || '') === normalize('Еда')) : null);
+    if (sameDayExisting) {
+      updateCalendarAppointmentNote(
+        sameDayExisting.id,
+        content,
+        noteTime,
+        {
+          firstEnabled: Boolean(reminderSettings.enabled),
+          morningTime: noteTime,
+          secondEnabled: Boolean(reminderSettings.secondReminderEnabled),
+          secondTime: reminderSettings.secondReminderTime || '20:00'
+        },
+        calendarSelectedDate
+      );
+      setCalendarDayPanelOpen(true);
+      setCalendarDayFilter('');
+      setCalendarNoteTime(noteTime);
+      setStatusVoice(`Обновил запись на ${formatCalendarDateLabel(selectedDate)}.`, false);
+      return;
+    }
+
     const note = buildAppointmentNote({
       uid,
       selectedDate,
       folder,
-      title: cleanTitle(content, 'Напоминание'),
+      title: buildCalendarReminderTitle(content),
       content,
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: noteTime,
@@ -1873,7 +1912,7 @@ export default function App() {
     const selectedDate = new Date(calendarSelectedDate);
     const parsedEvent = parseVoiceAppointmentDateTime(raw);
     const noteTime = parsedEvent.time || String(calendarNoteTime || '09:00');
-    const normalizedContent = normalize(content);
+    const normalizedContent = normalizeCalendarReminderText(content);
     const isShoppingText = inferType(content) === 'shopping_list';
     const [hour, minute] = noteTime.split(':').map(Number);
     selectedDate.setHours(hour || 0, minute || 0, 0, 0);
@@ -1881,7 +1920,7 @@ export default function App() {
     const folder = resolveSaveFolder(content, 'appointment', preferredFolder);
     const appointmentMeta = extractAppointmentMeta(content);
     const dayItems = notesForCalendarDate(calendarSelectedDate);
-    const sameDayExisting = dayItems.find(item => normalize(item.content || '') === normalizedContent)
+    const sameDayExisting = dayItems.find(item => normalizeCalendarReminderText(item.content || '') === normalizedContent)
       || dayItems.find(item => String(item.time || '') === noteTime && normalize(item.title || '') === normalize('Еда'))
       || (isShoppingText
         ? dayItems.find(item => normalize(item.title || '') === normalize('Еда'))
@@ -1910,7 +1949,7 @@ export default function App() {
       uid,
       selectedDate,
       folder,
-      title: cleanTitle(content, 'Напоминание'),
+      title: buildCalendarReminderTitle(content),
       content,
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: noteTime,
@@ -1970,7 +2009,7 @@ export default function App() {
       uid,
       selectedDate,
       folder,
-      title: cleanTitle(content, 'Напоминание'),
+      title: buildCalendarReminderTitle(content),
       content,
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: noteTime,
