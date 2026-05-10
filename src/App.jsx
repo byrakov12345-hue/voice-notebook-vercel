@@ -1599,6 +1599,10 @@ export default function App() {
       syncServerPushReminderScheduleInServiceWorker(notesForSync, nextSettings);
       syncServerPushReminderSchedule(notesForSync, nextSettings).then(result => {
         if (!result.ok) {
+          if (result.status === 'ios_homescreen_required') {
+            setStatusVoice('Для фоновых уведомлений на iPhone откройте блокнот с главного экрана (Add to Home Screen).', false);
+            return;
+          }
           setStatusVoice('Запись сохранена. Серверная доставка напоминаний пока не подтвердилась.', false);
         }
       });
@@ -2032,8 +2036,12 @@ export default function App() {
       await ensurePushSubscriptionCached();
       queueServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
       await registerReminderRecoverySync();
-      await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true });
-      await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
+      const swSync = await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true });
+      const serverSync = await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
+      if (swSync?.status === 'ios_homescreen_required' || serverSync?.status === 'ios_homescreen_required') {
+        setStatusVoice('На iPhone фоновый push работает только из веб-приложения на главном экране.', false);
+        return;
+      }
       setStatusVoice('Уведомления разрешены. Проверка отправлена в шторку.', false);
     } else {
       setStatusVoice('Разрешение на уведомления не выдано.', false);
@@ -2063,6 +2071,10 @@ export default function App() {
     await registerReminderRecoverySync();
     await syncServerPushReminderScheduleInServiceWorker(data.notes, { ...reminderSettings, enabled: true });
     const serverPush = await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
+    if (serverPush.status === 'ios_homescreen_required') {
+      setStatusVoice('На iPhone фоновые уведомления приходят только из версии на главном экране.', false);
+      return;
+    }
     setStatusVoice(serverPush.ok
       ? 'Напоминания включены. Серверная доставка подключена.'
       : 'Напоминания включены локально. Для закрытого телефона нужно серверное хранилище.',

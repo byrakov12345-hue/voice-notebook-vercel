@@ -1,5 +1,21 @@
 const PUSH_SUBSCRIPTION_STORAGE_KEY = 'smart_voice_notebook_push_subscription_v1';
 
+function isIosPlatform() {
+  if (typeof window === 'undefined') return false;
+  const ua = String(navigator.userAgent || '');
+  return /iPhone|iPad|iPod/i.test(ua);
+}
+
+function isStandaloneMode() {
+  if (typeof window === 'undefined') return false;
+  if (window.matchMedia?.('(display-mode: standalone)').matches) return true;
+  return Boolean(window.navigator.standalone);
+}
+
+export function requiresHomeScreenForPush() {
+  return isIosPlatform() && !isStandaloneMode();
+}
+
 function parseOffsetMinutes(value, customValue = 60) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (value === '15m') return 15;
@@ -244,6 +260,9 @@ export async function syncServerPushReminderScheduleInServiceWorker(notes = [], 
   ) {
     return { ok: false, status: 'unsupported' };
   }
+  if (requiresHomeScreenForPush()) {
+    return { ok: false, status: 'ios_homescreen_required' };
+  }
 
   const reminders = buildReminderPayloads(notes, reminderSettings);
   const message = {
@@ -277,6 +296,9 @@ export async function ensurePushSubscriptionCached() {
     Notification.permission !== 'granted'
   ) {
     return { ok: false, status: 'unsupported' };
+  }
+  if (requiresHomeScreenForPush()) {
+    return { ok: false, status: 'ios_homescreen_required' };
   }
 
   try {
@@ -319,6 +341,7 @@ export function queueServerPushReminderSchedule(notes = [], reminderSettings = {
   ) {
     return false;
   }
+  if (requiresHomeScreenForPush()) return false;
 
   const subscription = readCachedPushSubscription();
   if (!subscription) return false;
@@ -364,6 +387,9 @@ export async function syncServerPushReminderSchedule(notes = [], reminderSetting
     Notification.permission !== 'granted'
   ) {
     return { ok: false, status: 'unsupported' };
+  }
+  if (requiresHomeScreenForPush()) {
+    return { ok: false, status: 'ios_homescreen_required' };
   }
 
   try {
