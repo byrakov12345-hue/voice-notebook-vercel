@@ -1855,6 +1855,45 @@ export default function App() {
     if (saved) setCalendarNoteText('');
   }
 
+  function saveCalendarNoteFromCommand(text, preferredFolder = '') {
+    if (!calendarSelectedDate) return false;
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+    const content = raw.replace(/^(запомни|запиши|сохрани|добавь)\s*/i, '').trim() || raw;
+    const selectedDate = new Date(calendarSelectedDate);
+    const parsedEvent = parseVoiceAppointmentDateTime(raw);
+    const noteTime = parsedEvent.time || String(calendarNoteTime || '09:00');
+    const [hour, minute] = noteTime.split(':').map(Number);
+    selectedDate.setHours(hour || 0, minute || 0, 0, 0);
+
+    const folder = resolveSaveFolder(content, 'appointment', preferredFolder);
+    const appointmentMeta = extractAppointmentMeta(content);
+    const note = buildAppointmentNote({
+      uid,
+      selectedDate,
+      folder,
+      title: cleanTitle(content, 'Напоминание'),
+      content,
+      dateLabel: formatCalendarDateLabel(selectedDate),
+      time: noteTime,
+      appointmentMeta,
+      reminderFirstEnabled: Boolean(reminderSettings.enabled),
+      reminderMorningTime: noteTime,
+      reminderExplicitAt: '',
+      reminderUseMorningTime: !parsedEvent.time && normalize(content).includes('утром'),
+      reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
+      reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
+      reminderSecondEnabled: false,
+      reminderSecondTime: ''
+    });
+    setCalendarDayPanelOpen(true);
+    setCalendarDayFilter('');
+    setCalendarNoteTime(noteTime);
+    const saved = saveNote(note, true);
+    if (saved) setCalendarNoteText('');
+    return saved;
+  }
+
   function handleCalendarVoiceCommand(text) {
     const targetDate = parseVoiceCalendarTargetDate(text);
     if (!targetDate) return false;
@@ -2322,6 +2361,12 @@ export default function App() {
       if (handleReminderVoiceCommand(spoken)) {
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return;
+      }
+      if (calendarSelectedDate && calendarOpen && detectIntent(spoken) === 'save') {
+        if (saveCalendarNoteFromCommand(spoken, preferredFolder)) {
+          lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+          return;
+        }
       }
       if (startsWithAny(source, ['создай папку', 'создать папку'])) {
         const folderName = extractFolderCreateName(spoken) || cleanTitle(spoken.replace(/создай папку|создать папку/gi, ''), 'Новая папка');
