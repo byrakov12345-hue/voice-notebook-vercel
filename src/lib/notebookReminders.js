@@ -1,4 +1,5 @@
 const PUSH_SUBSCRIPTION_STORAGE_KEY = 'smart_voice_notebook_push_subscription_v1';
+const SERVER_REMINDER_LEAD_MS = 15000;
 
 function isIosPlatform() {
   if (typeof window === 'undefined') return false;
@@ -260,6 +261,13 @@ export function buildReminderPayloads(notes = [], reminderSettings = {}) {
   return reminders;
 }
 
+function buildServerReminderPayloads(notes = [], reminderSettings = {}) {
+  return buildReminderPayloads(notes, reminderSettings).map(item => ({
+    ...item,
+    at: Math.max(Date.now() + 1000, Number(item.at || 0) - SERVER_REMINDER_LEAD_MS)
+  }));
+}
+
 export async function syncServerPushReminderScheduleInServiceWorker(notes = [], reminderSettings = {}) {
   if (
     typeof window === 'undefined' ||
@@ -274,7 +282,7 @@ export async function syncServerPushReminderScheduleInServiceWorker(notes = [], 
     return { ok: false, status: 'ios_homescreen_required' };
   }
 
-  const reminders = buildReminderPayloads(notes, reminderSettings);
+  const reminders = buildServerReminderPayloads(notes, reminderSettings);
   const message = {
     type: 'smart-notebook-sync-server-reminders',
     reminders
@@ -358,7 +366,7 @@ export function queueServerPushReminderSchedule(notes = [], reminderSettings = {
 
   const body = JSON.stringify({
     subscription,
-    reminders: buildReminderPayloads(notes, reminderSettings)
+    reminders: buildServerReminderPayloads(notes, reminderSettings)
   });
 
   try {
@@ -424,7 +432,7 @@ export async function syncServerPushReminderSchedule(notes = [], reminderSetting
       keepalive: true,
       body: JSON.stringify({
         subscription: subscriptionJson || subscription.toJSON(),
-        reminders: buildReminderPayloads(notes, reminderSettings)
+        reminders: buildServerReminderPayloads(notes, reminderSettings)
       })
     });
 
