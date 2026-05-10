@@ -1,6 +1,9 @@
 self.__SMART_NOTEBOOK_TIMERS__ = self.__SMART_NOTEBOOK_TIMERS__ || new Map();
+self.__SMART_NOTEBOOK_FIRED__ = self.__SMART_NOTEBOOK_FIRED__ || new Set();
 const REMINDER_DB_NAME = 'smart_voice_notebook_reminders_db_v1';
 const REMINDER_STORE_NAME = 'reminders';
+const REMINDER_KEEP_PAST_MS = 24 * 60 * 60 * 1000;
+const REMINDER_OVERDUE_DELIVERY_MS = 6 * 60 * 60 * 1000;
 
 function urlBase64ToUint8Array(value) {
   const padding = '='.repeat((4 - value.length % 4) % 4);
@@ -53,7 +56,7 @@ async function readStoredReminders() {
 async function replaceStoredReminders(reminders) {
   const items = (Array.isArray(reminders) ? reminders : [])
     .filter(item => item?.key || item?.options?.tag)
-    .filter(item => Number(item?.at || 0) > Date.now() - 60 * 1000);
+    .filter(item => Number(item?.at || 0) > Date.now() - REMINDER_KEEP_PAST_MS);
 
   await withReminderStore('readwrite', store => {
     store.clear();
@@ -95,8 +98,11 @@ function notificationOptionsFromPayload(item) {
 }
 
 async function showReminder(item) {
+  const key = item?.key || item?.options?.tag;
+  if (key && self.__SMART_NOTEBOOK_FIRED__.has(key)) return;
   await self.registration.showNotification(item?.title || item?.options?.title || 'Напоминание', notificationOptionsFromPayload(item));
-  await deleteStoredReminder(item?.key || item?.options?.tag);
+  if (key) self.__SMART_NOTEBOOK_FIRED__.add(key);
+  await deleteStoredReminder(key);
 }
 
 function scheduleReminder(item) {
@@ -106,7 +112,11 @@ function scheduleReminder(item) {
 
   const delay = at - Date.now();
   if (delay <= 0) {
-    showReminder(item).catch(() => {});
+    if (Math.abs(delay) <= REMINDER_OVERDUE_DELIVERY_MS) {
+      showReminder(item).catch(() => {});
+    } else {
+      deleteStoredReminder(key).catch(() => {});
+    }
     return;
   }
 
