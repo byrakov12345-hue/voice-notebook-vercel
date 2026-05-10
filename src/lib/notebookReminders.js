@@ -6,6 +6,12 @@ function isIosPlatform() {
   return /iPhone|iPad|iPod/i.test(ua);
 }
 
+function isAndroidPlatform() {
+  if (typeof window === 'undefined') return false;
+  const ua = String(navigator.userAgent || '');
+  return /Android/i.test(ua);
+}
+
 function isStandaloneMode() {
   if (typeof window === 'undefined') return false;
   if (window.matchMedia?.('(display-mode: standalone)').matches) return true;
@@ -14,6 +20,10 @@ function isStandaloneMode() {
 
 export function requiresHomeScreenForPush() {
   return isIosPlatform() && !isStandaloneMode();
+}
+
+export function isMobileBrowserTabMode() {
+  return (isIosPlatform() || isAndroidPlatform()) && !isStandaloneMode();
 }
 
 function parseOffsetMinutes(value, customValue = 60) {

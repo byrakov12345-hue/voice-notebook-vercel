@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, ensurePushSubscriptionCached, isNotificationSupported, queueServerPushReminderSchedule, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, ensurePushSubscriptionCached, isMobileBrowserTabMode, isNotificationSupported, queueServerPushReminderSchedule, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -1604,6 +1604,10 @@ export default function App() {
             return;
           }
           setStatusVoice('Запись сохранена. Серверная доставка напоминаний пока не подтвердилась.', false);
+          return;
+        }
+        if (isMobileBrowserTabMode()) {
+          setStatusVoice('Для стабильных фоновых уведомлений на телефоне откройте блокнот с главного экрана, не из вкладки браузера.', false);
         }
       });
     };
@@ -2042,6 +2046,10 @@ export default function App() {
         setStatusVoice('На iPhone фоновый push работает только из веб-приложения на главном экране.', false);
         return;
       }
+      if (isMobileBrowserTabMode()) {
+        setStatusVoice('Уведомления разрешены. Для стабильного фона на телефоне используйте версию с главного экрана.', false);
+        return;
+      }
       setStatusVoice('Уведомления разрешены. Проверка отправлена в шторку.', false);
     } else {
       setStatusVoice('Разрешение на уведомления не выдано.', false);
@@ -2073,6 +2081,10 @@ export default function App() {
     const serverPush = await syncServerPushReminderSchedule(data.notes, { ...reminderSettings, enabled: true });
     if (serverPush.status === 'ios_homescreen_required') {
       setStatusVoice('На iPhone фоновые уведомления приходят только из версии на главном экране.', false);
+      return;
+    }
+    if (isMobileBrowserTabMode()) {
+      setStatusVoice('Напоминания включены. Для стабильной фоновой доставки на телефоне используйте запуск с главного экрана.', false);
       return;
     }
     setStatusVoice(serverPush.ok
