@@ -1871,13 +1871,19 @@ export default function App() {
     const selectedDate = new Date(calendarSelectedDate);
     const parsedEvent = parseVoiceAppointmentDateTime(raw);
     const noteTime = parsedEvent.time || String(calendarNoteTime || '09:00');
+    const normalizedContent = normalize(content);
+    const isShoppingText = inferType(content) === 'shopping_list';
     const [hour, minute] = noteTime.split(':').map(Number);
     selectedDate.setHours(hour || 0, minute || 0, 0, 0);
 
     const folder = resolveSaveFolder(content, 'appointment', preferredFolder);
     const appointmentMeta = extractAppointmentMeta(content);
-    const sameDayExisting = notesForCalendarDate(calendarSelectedDate)
-      .find(item => normalize(item.content || '') === normalize(content));
+    const dayItems = notesForCalendarDate(calendarSelectedDate);
+    const sameDayExisting = dayItems.find(item => normalize(item.content || '') === normalizedContent)
+      || dayItems.find(item => String(item.time || '') === noteTime && normalize(item.title || '') === normalize('Еда'))
+      || (isShoppingText
+        ? dayItems.find(item => normalize(item.title || '') === normalize('Еда'))
+        : null);
     if (sameDayExisting) {
       updateCalendarAppointmentNote(
         sameDayExisting.id,
