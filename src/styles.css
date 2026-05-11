@@ -299,6 +299,7 @@ p { color: var(--text-soft); line-height: 1.55; }
 .mic-button span { width: 74px; height: 74px; border-radius: 999px; display: grid; place-items: center; color: #020617; background: #f8fafc; font-size: 30px; line-height: 1; box-shadow: 0 0 44px rgba(248, 250, 252, 0.28); }
 .mic-button strong { font-size: 22px; letter-spacing: -0.03em; }
 .mic-button.listening { background: linear-gradient(145deg, rgba(239, 68, 68, 0.46), rgba(124, 58, 237, 0.44)); border-color: rgba(248, 113, 113, 0.58); }
+.install-inline-button { margin-top: 10px; text-align: center; }
 .status-card { display: grid; gap: 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 22px; background: rgba(2, 6, 23, 0.36); padding: 14px; }
 .status-card span { color: var(--muted); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
 .status-card strong { overflow-wrap: anywhere; line-height: 1.45; }

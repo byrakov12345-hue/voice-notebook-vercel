@@ -2848,7 +2848,7 @@ export default function App() {
     if (panel === 'settings') setSettingsOpen(true);
   }
 
-  const shouldShowInstallPrompt = !isInstalled && !installPromptDismissed;
+  const shouldShowInstallPrompt = !isInstalled;
 
   return (
     <div className="app-shell">
@@ -3142,6 +3142,11 @@ export default function App() {
               <span>{listening ? '■' : '●'}</span>
               <strong>{listening ? 'Слушаю' : 'Говорить'}</strong>
             </button>
+            {!isInstalled ? (
+              <button type="button" className="tool-button install-inline-button" onClick={promptInstallApp}>
+                Установить приложение
+              </button>
+            ) : null}
             <div className="status-card">
               <span>Статус</span>
               <strong>{status}</strong>
