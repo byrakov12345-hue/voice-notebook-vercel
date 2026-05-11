@@ -1570,7 +1570,7 @@ export default function App() {
   }, [selectedCalendarDayNotes, calendarDayFilter]);
   const quickDateStrip = useMemo(() => buildQuickDateStrip(), []);
   const nextReminderAtLabel = useMemo(() => {
-    if (!reminderSettings.enabled) return 'выключено';
+    if (!reminderSettings.enabled) return 'Напоминания выключены';
     const points = data.notes
       .filter(note => note?.type === 'appointment' && note.eventAt)
       .flatMap(note => buildReminderPoints(note, reminderSettings))
@@ -2950,7 +2950,7 @@ export default function App() {
             <div className="reminder-diagnostics">
               <div><span>AI</span><strong>{useAI ? 'локальный включён' : 'выключен'}</strong></div>
               <div><span>Уведомления</span><strong>{notificationPermissionLabel}</strong></div>
-              <div><span>Следующее</span><strong>{nextReminderAtLabel}</strong></div>
+              <div><span>Ближайшее напоминание</span><strong>{nextReminderAtLabel}</strong></div>
               <div><span>Память телефона</span><strong>{lastReminderSyncAt ? new Date(lastReminderSyncAt).toLocaleString('ru-RU') : 'ожидает синхронизации'}</strong></div>
             </div>
             {settingsOpen ? (
