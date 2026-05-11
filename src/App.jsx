@@ -717,14 +717,14 @@ function deriveShoppingListTitle(items, text = '') {
 
 function isShoppingAppendCommand(text) {
   const source = normalize(text);
-  if (includesAny(source, ['добавь к', 'добавь в', 'добавь еще в', 'добавь ещё в'])) return true;
-  return includesAny(source, ['добавь', 'еще', 'ещё']) && inferType(text) === 'shopping_list';
+  if (includesAny(source, ['добавь к', 'добавь в', 'добавь еще в', 'добавь ещё в', 'допиши к', 'докинь в', 'впиши в', 'внеси в'])) return true;
+  return includesAny(source, ['добавь', 'добавить', 'допиши', 'дописать', 'докинь', 'впиши', 'внеси', 'еще', 'ещё', 'плюс']) && inferType(text) === 'shopping_list';
 }
 
 function extractShoppingAppendItems(text) {
   const base = String(text || '')
     .replace(/\s+и\s+(оповещ|уведомл|напоминан).*/i, '')
-    .replace(/^(добавь|добавить)\s+/i, '')
+    .replace(/^(добавь|добавить|допиши|дописать|докинь|впиши|внеси)\s+/i, '')
     .replace(/^к\s+[а-яa-z0-9-]+\s*/i, '')
     .trim();
   return extractItems(base)
@@ -898,7 +898,7 @@ function detectIntent(text) {
   if (includesAny(source, ['переименуй', 'назови запись как'])) return 'rename';
   if (includesAny(source, ['перемести это в', 'перенеси это в', 'перемести запись в', 'перенеси запись в'])) return 'move';
   if (includesAny(source, ['измени последнюю запись', 'открой последнюю запись для изменения'])) return 'edit';
-  if (includesAny(source, ['добавь туда', 'добавь ещё туда', 'добавь еще туда', 'добавь в запись', 'добавь в список'])) return 'append';
+  if (includesAny(source, ['добавь туда', 'добавь ещё туда', 'добавь еще туда', 'добавь в запись', 'добавь в список', 'допиши туда', 'впиши туда', 'внеси туда'])) return 'append';
   if (includesAny(source, ['скопируй', 'копируй', 'скопировать', 'в буфер', 'в буфер обмена'])) return 'copy';
   if (includesAny(source, ['поделись', 'поделиться', 'отправь', 'скинь'])) return 'share';
   if (includesAny(source, ['прочитай', 'зачитай', 'озвучь', 'продиктуй'])) return 'read';
@@ -2774,6 +2774,13 @@ function findLatestCompatibleShoppingList(folderName, items) {
           lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
           return;
         }
+        if (items.length) {
+          const fallbackText = `купить ${items.join(', ')}`;
+          const note = createNoteFromLocalText(fallbackText, 'Покупки', reminderDefaults);
+          saveNote(note, false);
+          lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+          return;
+        }
       }
 
       if (useAI) {
@@ -2794,8 +2801,15 @@ function findLatestCompatibleShoppingList(folderName, items) {
         }
         if (isShoppingAppendCommand(spoken)) {
           const targetFolder = resolveSaveFolder(spoken, 'shopping_list', preferredFolder);
-          const items = extractItems(spoken);
+          const items = extractShoppingAppendItems(spoken);
           if (appendToLatestShoppingList(targetFolder, items, spoken)) {
+            lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+            return;
+          }
+          if (items.length) {
+            const fallbackText = `купить ${items.join(', ')}`;
+            const note = createNoteFromLocalText(fallbackText, targetFolder || 'Покупки', reminderDefaults);
+            saveNote(note, false);
             lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
             return;
           }
