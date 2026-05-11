@@ -2950,7 +2950,7 @@ export default function App() {
             ) : null}
           </section>
 
-          <section className={`panel folders mobile-panel ${mobilePanel === 'folders' ? 'mobile-active' : ''}`}>
+          <section className={`panel folders mobile-panel ${(mobilePanel === 'folders' || mobilePanel === 'voice') ? 'mobile-active' : ''}`}>
             <div className="folders-head">
               <div>
                 <p className="eyebrow">Разделы</p>
