@@ -515,10 +515,9 @@ p { color: var(--text-soft); line-height: 1.55; }
   }
   .notes.mobile-active {
     grid-template-rows: auto auto auto minmax(0, 1fr);
-    max-height: calc(100dvh - 104px);
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
     padding-bottom: 104px;
-    -webkit-overflow-scrolling: touch;
   }
   .folders.mobile-active,
   .settings-panel.mobile-active,
@@ -569,7 +568,7 @@ p { color: var(--text-soft); line-height: 1.55; }
   }
   .note-list {
     min-height: 0;
-    overflow: auto;
+    overflow: visible;
     padding-right: 2px;
     padding-bottom: 96px;
   }
