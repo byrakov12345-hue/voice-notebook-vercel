@@ -1192,7 +1192,7 @@ function localAIPlan(text, data, currentNote, activeFolder = '') {
   return { action: 'unknown', type: 'unknown' };
 }
 
-function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy, onDelete, onCall, onMessage, onRestore }) {
+function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy, onDelete, onEdit, onCall, onMessage, onRestore }) {
   const hasDuplicateBody = normalize(note.title) === normalize(note.content);
   const appointmentBody = note.type === 'appointment' ? compactAppointmentBody(note) : '';
   const appointmentFallback = note.type === 'appointment'
@@ -1234,6 +1234,12 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
         ) : (
           !hasDuplicateBody ? <p>{note.content}</p> : null
         )}
+      </div>
+      <div className="actions note-actions">
+        <button type="button" onClick={() => onCopy(note)}>Копировать</button>
+        <button type="button" onClick={() => onShare(note)}>Поделиться</button>
+        <button type="button" onClick={() => onEdit(note)}>Редактировать</button>
+        <button type="button" className="danger" onClick={() => onDelete(note)}>Удалить</button>
       </div>
       {note.type === 'contact' && note.phone ? (
         <div className="actions">
@@ -2663,6 +2669,68 @@ function findLatestCompatibleShoppingList(folderName, items) {
     setStatusVoice('Скопировано.');
   }
 
+  function editNoteNow(note) {
+    if (!note) return;
+    const initial = note.type === 'shopping_list'
+      ? (note.items || []).join(', ')
+      : (note.content || note.title || '');
+    const raw = window.prompt('Измените текст записи:', initial);
+    if (raw == null) return;
+    const nextText = String(raw).trim();
+    if (!nextText) return setStatusVoice('Пустой текст не сохранён.', false);
+
+    updateNoteById(note.id, current => {
+      if (current.type === 'shopping_list') {
+        const items = extractItems(nextText);
+        return {
+          ...current,
+          content: items.join(', '),
+          items,
+          title: current.title || 'Список покупок'
+        };
+      }
+      if (current.type === 'appointment') {
+        const parsed = parseVoiceAppointmentDateTime(nextText);
+        const cleanText = sanitizeAppointmentContent(nextText) || nextText;
+        const nextTime = parsed.time || current.time || '09:00';
+        const eventBase = parsed.eventAt
+          ? new Date(parsed.eventAt)
+          : (current.eventAt ? new Date(current.eventAt) : null);
+        const eventAt = eventBase && !Number.isNaN(eventBase.getTime())
+          ? (() => {
+              const [h, m] = String(nextTime).split(':').map(Number);
+              eventBase.setHours(h || 0, m || 0, 0, 0);
+              return eventBase.toISOString();
+            })()
+          : current.eventAt;
+        return {
+          ...current,
+          title: cleanTitle(cleanText, current.title || 'Встреча'),
+          content: cleanText,
+          dateLabel: parsed.dateLabel || current.dateLabel || '',
+          time: nextTime,
+          eventAt: eventAt || '',
+          reminderMorningTime: nextTime,
+          reminderExplicitAt: eventAt || ''
+        };
+      }
+      if (current.type === 'contact') {
+        return {
+          ...current,
+          content: nextText,
+          description: nextText,
+          title: current.name ? `${current.name} — ${nextText}` : cleanTitle(nextText, current.title || 'Контакт')
+        };
+      }
+      return {
+        ...current,
+        content: nextText,
+        title: cleanTitle(nextText, current.title || 'Запись')
+      };
+    });
+    setStatusVoice('Запись обновлена.', false);
+  }
+
   function callNote(note) {
     if (!note?.phone) return setStatusVoice('У контакта нет номера.');
     window.location.href = `tel:${note.phone}`;
@@ -3387,6 +3455,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
                   onShare={shareNote}
                   onCopy={copyNote}
                   onDelete={deleteNoteNow}
+                  onEdit={editNoteNow}
                   onCall={callNote}
                   onMessage={messageNote}
                 />
