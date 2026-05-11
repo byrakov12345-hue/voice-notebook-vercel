@@ -3439,21 +3439,45 @@ function findLatestCompatibleShoppingList(folderName, items) {
               </div>
             ) : null}
             <div className="note-list">
-              {visibleNotes.length ? visibleNotes.map((note, index) => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  displayIndex={index + 1}
-                  selected={selectedId === note.id}
-                  onOpen={openNote}
-                  onShare={shareNote}
-                  onCopy={copyNote}
-                  onDelete={deleteNoteNow}
-                  onEdit={editNoteNow}
-                  onCall={callNote}
-                  onMessage={messageNote}
-                />
-              )) : <div className="empty">Записей пока нет. Нажмите «Говорить» или введите команду.</div>}
+              {visibleNotes.length ? visibleNotes.map((note, index) => {
+                const compactText = note.type === 'shopping_list'
+                  ? (note.items || []).join(', ')
+                  : note.type === 'contact'
+                    ? [note.phone ? `Телефон: ${note.phone}` : '', note.description ? `Описание: ${note.description}` : ''].filter(Boolean).join('\n')
+                    : note.type === 'appointment'
+                      ? `Когда: ${[note.dateLabel, note.time].filter(Boolean).join(', ') || 'не указано'}\n${sanitizeAppointmentContent(note.content || '') || note.content || ''}`
+                      : (note.content || '');
+                return (
+                  <article key={note.id} className={`note-card plain-note-card ${selectedId === note.id ? 'selected' : ''}`}>
+                    <div
+                      className="note-main"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openNote(note)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openNote(note);
+                        }
+                      }}
+                    >
+                      <div className="note-top">
+                        <span>{index + 1}. {note.folder} · {TYPE_LABELS[note.type] || 'Запись'}</span>
+                        <small>{formatDate(note.createdAt)}</small>
+                      </div>
+                      <h3>{index + 1}. {note.title || 'Без названия'}</h3>
+                      <p>{compactText || 'Текст записи пуст.'}</p>
+                    </div>
+                    <div className="note-actions-label">Действия записи</div>
+                    <div className="actions note-actions">
+                      <button type="button" onClick={() => copyNote(note)}>Копировать</button>
+                      <button type="button" onClick={() => shareNote(note)}>Поделиться</button>
+                      <button type="button" onClick={() => editNoteNow(note)}>Редактировать</button>
+                      <button type="button" className="danger" onClick={() => deleteNoteNow(note)}>Удалить</button>
+                    </div>
+                  </article>
+                );
+              }) : <div className="empty">Записей пока нет. Нажмите «Говорить» или введите команду.</div>}
             </div>
           </section>
         </main>
