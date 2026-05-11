@@ -743,6 +743,18 @@ function sanitizeShoppingContent(text) {
   return extractItems(text).join(', ');
 }
 
+function sanitizeAppointmentContent(text) {
+  const stripped = stripVoiceCalendarVoiceContent(String(text || ''));
+  return stripped
+    .replace(/^(завтра|сегодня|послезавтра)\s*/i, '')
+    .replace(/^(?:в|на)\s+\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\s*/i, '')
+    .replace(/^\d{1,2}([:.]\d{2})?\s+(утра|дня|вечера|ночи)\s*/i, '')
+    .replace(/^(?:в|на)\s+\d{1,2}[:.]\d{2}\s*/i, '')
+    .replace(/^\d{1,2}[:.]\d{2}\s*/i, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function deriveShoppingListTitle(items, text = '') {
   const normalizedItems = (items || []).map(item => normalize(item)).filter(Boolean);
   const source = normalize([text, ...normalizedItems].join(' '));
@@ -858,13 +870,14 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
 
   if (type === 'appointment') {
     const eventMeta = parseVoiceAppointmentDateTime(text);
-    const appointmentMeta = extractAppointmentMeta(text);
+    const cleanAppointmentContent = sanitizeAppointmentContent(content);
+    const appointmentMeta = extractAppointmentMeta(cleanAppointmentContent);
     let title = 'Встреча';
-    if (normalize(content).includes('стриж')) title = 'Стрижка';
-    else if (normalize(content).includes('врач')) title = 'Врач';
-    else title = cleanTitle(content, 'Встреча');
+    if (normalize(cleanAppointmentContent).includes('стриж')) title = 'Стрижка';
+    else if (normalize(cleanAppointmentContent).includes('врач')) title = 'Врач';
+    else title = cleanTitle(cleanAppointmentContent, 'Встреча');
     return {
-      id: uid('note'), type, folder, title, content,
+      id: uid('note'), type, folder, title, content: cleanAppointmentContent || content,
       dateLabel: eventMeta.dateLabel, time: eventMeta.time, eventAt: eventMeta.eventAt,
       reminderFirstEnabled: Boolean(reminderDefaults.firstEnabled ?? false),
       reminderMorningTime: eventMeta.time || reminderDefaults.morningTime || '09:00',
@@ -1140,14 +1153,15 @@ function localAIPlan(text, data, currentNote, activeFolder = '') {
     if (type === 'code') {
       return { action: 'save_code', type, folder: resolveSaveFolder(text, type, activeFolder), title: 'Комбинация цифр', content: extractDigits(content) || content, tags: ['код', 'комбинация', 'цифры'], showAfterSave };
     }
-    if (type === 'appointment') {
-      const appointmentTime = extractAppointmentTime(text);
-      const appointmentDate = extractAppointmentDateLabel(text);
-      let title = cleanTitle(content, 'Встреча');
-      if (source.includes('стриж')) title = 'Стрижка';
-      else if (source.includes('врач')) title = 'Врач';
-      return { action: 'save_appointment', type, folder: resolveSaveFolder(text, type, activeFolder), title, content, dateLabel: appointmentDate, time: appointmentTime, tags: ['встреча', appointmentDate, appointmentTime].filter(Boolean), showAfterSave };
-    }
+  if (type === 'appointment') {
+    const appointmentTime = extractAppointmentTime(text);
+    const appointmentDate = extractAppointmentDateLabel(text);
+    const cleanAppointmentContent = sanitizeAppointmentContent(content);
+    let title = cleanTitle(cleanAppointmentContent, 'Встреча');
+    if (normalize(cleanAppointmentContent).includes('стриж')) title = 'Стрижка';
+    else if (normalize(cleanAppointmentContent).includes('врач')) title = 'Врач';
+    return { action: 'save_appointment', type, folder: resolveSaveFolder(text, type, activeFolder), title, content: cleanAppointmentContent || content, dateLabel: appointmentDate, time: appointmentTime, tags: ['встреча', appointmentDate, appointmentTime].filter(Boolean), showAfterSave };
+  }
     if (type === 'idea') {
       return { action: 'save_idea', type, folder: 'Идеи', title: cleanTitle(content, 'Идея'), content, tags: normalize(content).split(' ').filter(w => w.length > 3).slice(0, 10), showAfterSave };
     }
