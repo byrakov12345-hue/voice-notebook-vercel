@@ -1195,6 +1195,8 @@ function localAIPlan(text, data, currentNote, activeFolder = '') {
 function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy, onDelete, onCall, onMessage, onRestore }) {
   const hasDuplicateBody = normalize(note.title) === normalize(note.content);
   const appointmentBody = note.type === 'appointment' ? compactAppointmentBody(note) : '';
+  const appointmentFallback = note.type === 'appointment' ? sanitizeAppointmentContent(note.content || '').trim() : '';
+  const noteTitle = String(note.title || '').trim() || (note.type === 'appointment' ? 'Встреча' : 'Без названия');
   return (
     <article className={`note-card ${selected ? 'selected' : ''}`}>
       <button className="note-main" onClick={() => onOpen(note)}>
@@ -1202,7 +1204,7 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
           <span>{displayIndex ? `${displayIndex}. ` : ''}{note.folder} · {TYPE_LABELS[note.type] || 'Запись'}</span>
           <small>{formatDate(note.createdAt)}</small>
         </div>
-        <h3>{displayIndex ? `${displayIndex}. ` : ''}{note.title}</h3>
+        <h3>{displayIndex ? `${displayIndex}. ` : ''}{noteTitle}</h3>
         {note.type === 'shopping_list' ? (
           <ul>{(note.items || []).map((item, i) => <li key={`${note.id}_${i}`}>{item}</li>)}</ul>
         ) : note.type === 'contact' ? (
@@ -1213,7 +1215,7 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
             {note.actionLabel ? <><br /><b>Действие:</b> {note.actionLabel}</> : null}
             {note.placeLabel ? <><br /><b>Место:</b> {note.placeLabel}</> : null}
             {note.codeLabel ? <><br /><b>Код:</b> {note.codeLabel}</> : null}
-            {appointmentBody ? <><br />{appointmentBody}</> : null}
+            {appointmentBody ? <><br />{appointmentBody}</> : appointmentFallback ? <><br />{appointmentFallback}</> : null}
           </p>
         ) : (
           !hasDuplicateBody ? <p>{note.content}</p> : null
@@ -1892,6 +1894,13 @@ export default function App() {
     let duplicateDetected = false;
     let duplicateNote = null;
     setData(prev => {
+      if (note.type === 'appointment') {
+        return {
+          ...prev,
+          folders: ensureFolder(prev.folders, note.folder),
+          notes: [note, ...prev.notes]
+        };
+      }
       const nowTs = Date.now();
       duplicateNote = prev.notes.find(existing => {
         const createdAt = new Date(existing.createdAt || existing.updatedAt || nowTs).getTime();
@@ -1923,6 +1932,36 @@ export default function App() {
     setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
     ensureReminderReady(note);
     return true;
+  }
+
+  function changeSelectedReminderTime() {
+    if (!selectedNote || selectedNote.type !== 'appointment') {
+      setStatusVoice('Откройте запись встречи для изменения времени.', false);
+      return;
+    }
+    const raw = window.prompt('Новое время (например 18:30 или в 6 вечера):', selectedNote.time || '18:00');
+    if (!raw) return;
+    const parsedTime = parseVoiceAppointmentDateTime(raw).time || parseAppointmentDateTime(raw).time || '';
+    const fallback = String(raw).trim().match(/^([01]?\d|2[0-3])[:.]([0-5]\d)$/);
+    const nextTime = parsedTime || (fallback ? `${String(Number(fallback[1])).padStart(2, '0')}:${fallback[2]}` : '');
+    if (!nextTime) {
+      setStatusVoice('Не понял время. Пример: 18:30 или в 6 вечера.', false);
+      return;
+    }
+
+    updateNoteById(selectedNote.id, note => {
+      const base = note.eventAt ? new Date(note.eventAt) : new Date();
+      const [hour, minute] = nextTime.split(':').map(Number);
+      base.setHours(hour || 0, minute || 0, 0, 0);
+      return {
+        ...note,
+        time: nextTime,
+        eventAt: base.toISOString(),
+        reminderMorningTime: nextTime,
+        reminderExplicitAt: base.toISOString()
+      };
+    });
+    setStatusVoice(`Время уведомления обновлено: ${nextTime}.`, false);
   }
 
   function ensureReminderReady(note) {
@@ -3306,6 +3345,9 @@ function findLatestCompatibleShoppingList(folderName, items) {
                 <div>
                   <button type="button" onClick={() => copyNote(selectedNote)}>Копировать</button>
                   <button type="button" onClick={() => shareNote(selectedNote)}>Поделиться</button>
+                  {selectedNote.type === 'appointment' ? (
+                    <button type="button" onClick={changeSelectedReminderTime}>Поменять время</button>
+                  ) : null}
                   <button type="button" className="danger" onClick={() => deleteNoteNow(selectedNote)}>Удалить</button>
                 </div>
               </div>
