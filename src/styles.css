@@ -275,7 +275,7 @@ p { color: var(--text-soft); line-height: 1.55; }
 .note-top { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
 .note-top span, .note-top small { min-width: 0; overflow-wrap: anywhere; }
 .note-card h3 { margin: 0; font-size: 20px; letter-spacing: -0.03em; }
-.note-card p { margin: 0; }
+.note-card p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.48; }
 .note-card ul { margin: 0; padding-left: 18px; color: var(--text-soft); }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px 16px; }
 .actions button { padding: 8px 11px; font-size: 13px; }
@@ -568,9 +568,10 @@ p { color: var(--text-soft); line-height: 1.55; }
   }
   .note-list {
     min-height: 0;
-    overflow: visible;
+    overflow: auto;
     padding-right: 2px;
     padding-bottom: 96px;
+    -webkit-overflow-scrolling: touch;
   }
   .note-main { padding: 13px; }
   .note-card h3 { font-size: 18px; }
@@ -701,8 +702,9 @@ p { color: var(--text-soft); line-height: 1.55; }
     padding-bottom: 112px;
   }
   .notes.mobile-active .note-list {
-    overflow: visible;
+    overflow: auto;
     padding-bottom: 112px;
+    -webkit-overflow-scrolling: touch;
   }
   .folder-note-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .folder-note-delete { grid-column: 3; }

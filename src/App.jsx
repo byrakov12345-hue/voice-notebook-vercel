@@ -1195,7 +1195,9 @@ function localAIPlan(text, data, currentNote, activeFolder = '') {
 function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy, onDelete, onCall, onMessage, onRestore }) {
   const hasDuplicateBody = normalize(note.title) === normalize(note.content);
   const appointmentBody = note.type === 'appointment' ? compactAppointmentBody(note) : '';
-  const appointmentFallback = note.type === 'appointment' ? sanitizeAppointmentContent(note.content || '').trim() : '';
+  const appointmentFallback = note.type === 'appointment'
+    ? (sanitizeAppointmentContent(note.content || '').trim() || String(note.content || '').trim())
+    : '';
   const noteTitle = String(note.title || '').trim() || (note.type === 'appointment' ? 'Встреча' : 'Без названия');
   return (
     <article className={`note-card ${selected ? 'selected' : ''}`}>
@@ -1705,6 +1707,8 @@ export default function App() {
     () => visibleNotes.findIndex(note => note.id === selectedId),
     [visibleNotes, selectedId]
   );
+  const activeSelectedNote = selectedNote || visibleNotes[0] || null;
+  const activeSelectedIndex = activeSelectedNote ? visibleNotes.findIndex(note => note.id === activeSelectedNote.id) : -1;
 
   function setStatusVoice(text, voice = true) {
     setStatus(text);
@@ -1934,12 +1938,12 @@ export default function App() {
     return true;
   }
 
-  function changeSelectedReminderTime() {
-    if (!selectedNote || selectedNote.type !== 'appointment') {
+  function changeSelectedReminderTime(targetNote = selectedNote) {
+    if (!targetNote || targetNote.type !== 'appointment') {
       setStatusVoice('Откройте запись встречи для изменения времени.', false);
       return;
     }
-    const raw = window.prompt('Новое время (например 18:30 или в 6 вечера):', selectedNote.time || '18:00');
+    const raw = window.prompt('Новое время (например 18:30 или в 6 вечера):', targetNote.time || '18:00');
     if (!raw) return;
     const parsedTime = parseVoiceAppointmentDateTime(raw).time || parseAppointmentDateTime(raw).time || '';
     const fallback = String(raw).trim().match(/^([01]?\d|2[0-3])[:.]([0-5]\d)$/);
@@ -1949,7 +1953,7 @@ export default function App() {
       return;
     }
 
-    updateNoteById(selectedNote.id, note => {
+    updateNoteById(targetNote.id, note => {
       const base = note.eventAt ? new Date(note.eventAt) : new Date();
       const [hour, minute] = nextTime.split(':').map(Number);
       base.setHours(hour || 0, minute || 0, 0, 0);
@@ -3329,7 +3333,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
               <div>
                 <p className="eyebrow">Записи</p>
                 <h2>{selectedFolder}</h2>
-                <p>{visibleNotes.length} записей{selectedNote ? ` · открыта №${selectedNoteIndex + 1}` : ''}</p>
+                <p>{visibleNotes.length} записей{activeSelectedNote ? ` · открыта №${activeSelectedIndex + 1}` : ''}</p>
               </div>
               <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Поиск по заметкам, контактам и папкам" />
             </div>
@@ -3339,16 +3343,24 @@ function findLatestCompatibleShoppingList(folderName, items) {
               <button type="button" className={historyFilter === 'yesterday' ? 'active' : ''} onClick={() => showPeriod('yesterday')}>Вчера</button>
               <button type="button" className={historyFilter === 'week' ? 'active' : ''} onClick={() => showPeriod('week')}>Неделя</button>
             </div>
-            {selectedNote ? (
+            {activeSelectedNote ? (
               <div className="selected-strip">
-                <span>Открыта: {selectedNote.title}</span>
+                <span>Открыта: {activeSelectedNote.title}</span>
                 <div>
-                  <button type="button" onClick={() => copyNote(selectedNote)}>Копировать</button>
-                  <button type="button" onClick={() => shareNote(selectedNote)}>Поделиться</button>
-                  {selectedNote.type === 'appointment' ? (
-                    <button type="button" onClick={changeSelectedReminderTime}>Поменять время</button>
+                  <button type="button" onClick={() => copyNote(activeSelectedNote)}>Копировать</button>
+                  <button type="button" onClick={() => shareNote(activeSelectedNote)}>Поделиться</button>
+                  {activeSelectedNote.type === 'appointment' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedId !== activeSelectedNote.id) setSelectedId(activeSelectedNote.id);
+                        changeSelectedReminderTime(activeSelectedNote);
+                      }}
+                    >
+                      Поменять время
+                    </button>
                   ) : null}
-                  <button type="button" className="danger" onClick={() => deleteNoteNow(selectedNote)}>Удалить</button>
+                  <button type="button" className="danger" onClick={() => deleteNoteNow(activeSelectedNote)}>Удалить</button>
                 </div>
               </div>
             ) : null}
