@@ -53,6 +53,7 @@ const VOICE_STORAGE_KEY = 'smart_voice_notebook_voice_v1';
 const VOICE_STYLE_STORAGE_KEY = 'smart_voice_notebook_voice_style_v1';
 const REMINDER_STORAGE_KEY = 'smart_voice_notebook_reminders_v1';
 const INSTALL_PROMPT_DISMISSED_KEY = 'smart_voice_notebook_install_dismissed_v1';
+const FIRST_LAUNCH_BOOT_KEY = 'smart_voice_notebook_first_launch_boot_v1';
 
 function makeInitialData() {
   const now = new Date().toISOString();
@@ -1281,6 +1282,34 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(reminderSettings));
   }, [reminderSettings]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let alreadyBooted = false;
+    try { alreadyBooted = localStorage.getItem(FIRST_LAUNCH_BOOT_KEY) === '1'; } catch {}
+    if (alreadyBooted) return;
+    try { localStorage.setItem(FIRST_LAUNCH_BOOT_KEY, '1'); } catch {}
+
+    let cancelled = false;
+    (async () => {
+      if (!isNotificationSupported()) return;
+      const permission = await requestNotificationPermission();
+      if (cancelled || permission !== 'granted') return;
+      const nextSettings = { ...reminderSettings, enabled: true };
+      setReminderSettings(prev => (prev.enabled ? prev : { ...prev, enabled: true }));
+      await registerReminderRecoverySync();
+      const ok = await syncServiceWorkerReminderSchedule(data.notes, nextSettings);
+      if (ok) setLastReminderSyncAt(new Date().toISOString());
+      await syncServerRemindersBestEffort(data.notes, nextSettings);
+      await showServiceWorkerTestNotification();
+      setStatusVoice('Уведомления и локальная память напоминаний подключены.', false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   useEffect(() => {
