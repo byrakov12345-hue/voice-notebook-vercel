@@ -270,8 +270,9 @@ p { color: var(--text-soft); line-height: 1.55; }
   overflow: hidden;
 }
 .note-card.selected { border-color: rgba(103, 232, 249, 0.72); box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.12); }
-.note-main { width: 100%; display: grid; gap: 10px; text-align: left; padding: 16px; border: 0; border-radius: 0; background: transparent; color: #e2e8f0; min-height: 112px; align-content: start; }
+.note-main { width: 100%; display: grid; gap: 10px; text-align: left; padding: 16px; border: 0; border-radius: 0; background: transparent; color: #e2e8f0; min-height: 112px; align-content: start; cursor: pointer; }
 .note-main:hover { transform: none; background: rgba(255, 255, 255, 0.04); }
+.note-main:focus-visible { outline: 2px solid rgba(103, 232, 249, 0.8); outline-offset: -2px; border-radius: 12px; }
 .note-top { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
 .note-top span, .note-top small { min-width: 0; overflow-wrap: anywhere; }
 .note-card h3 { margin: 0; font-size: 20px; letter-spacing: -0.03em; color: #f8fafc; }

@@ -1202,7 +1202,18 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
   const appointmentText = [appointmentBody, appointmentFallback].find(Boolean) || 'Текст встречи пуст.';
   return (
     <article className={`note-card ${selected ? 'selected' : ''}`}>
-      <button className="note-main" onClick={() => onOpen(note)}>
+      <div
+        className="note-main"
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen(note)}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onOpen(note);
+          }
+        }}
+      >
         <div className="note-top">
           <span>{displayIndex ? `${displayIndex}. ` : ''}{note.folder} · {TYPE_LABELS[note.type] || 'Запись'}</span>
           <small>{formatDate(note.createdAt)}</small>
@@ -1223,7 +1234,7 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
         ) : (
           !hasDuplicateBody ? <p>{note.content}</p> : null
         )}
-      </button>
+      </div>
       {note.type === 'contact' && note.phone ? (
         <div className="actions">
           <button onClick={() => onCall(note)}>Позвонить</button>
