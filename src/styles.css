@@ -693,7 +693,17 @@ p { color: var(--text-soft); line-height: 1.55; }
   .mobile-dock { left: 8px; right: 8px; gap: 4px; padding: 6px; border-radius: 22px; }
   .mobile-dock button { min-height: 50px; border-radius: 16px; }
   .mobile-dock button strong { font-size: 9.5px; }
-  .mobile-panel.mobile-active { height: calc(100dvh - 100px); max-height: calc(100dvh - 100px); }
+  .mobile-panel.mobile-active { height: auto; max-height: none; overflow: visible; }
+  .notes.mobile-active {
+    max-height: calc(100dvh - 100px);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 112px;
+  }
+  .notes.mobile-active .note-list {
+    overflow: visible;
+    padding-bottom: 112px;
+  }
   .folder-note-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .folder-note-delete { grid-column: 3; }
 }
