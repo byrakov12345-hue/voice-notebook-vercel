@@ -54,6 +54,7 @@ const VOICE_STYLE_STORAGE_KEY = 'smart_voice_notebook_voice_style_v1';
 const REMINDER_STORAGE_KEY = 'smart_voice_notebook_reminders_v1';
 const INSTALL_PROMPT_DISMISSED_KEY = 'smart_voice_notebook_install_dismissed_v1';
 const FIRST_LAUNCH_BOOT_KEY = 'smart_voice_notebook_first_launch_boot_v1';
+const FIRST_TOUCH_BOOT_KEY = 'smart_voice_notebook_first_touch_boot_v1';
 
 function makeInitialData() {
   const now = new Date().toISOString();
@@ -1310,6 +1311,41 @@ export default function App() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const isStandalone = Boolean(window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone);
+    if (!isStandalone || !isNotificationSupported()) return undefined;
+    let touched = false;
+    try { touched = localStorage.getItem(FIRST_TOUCH_BOOT_KEY) === '1'; } catch {}
+    if (touched) return undefined;
+
+    let cancelled = false;
+    const onFirstTouch = async () => {
+      window.removeEventListener('pointerdown', onFirstTouch);
+      window.removeEventListener('touchstart', onFirstTouch);
+      try { localStorage.setItem(FIRST_TOUCH_BOOT_KEY, '1'); } catch {}
+      const permission = await requestNotificationPermission();
+      if (cancelled || permission !== 'granted') return;
+      const nextSettings = { ...reminderSettings, enabled: true };
+      setReminderSettings(prev => (prev.enabled ? prev : { ...prev, enabled: true }));
+      await registerReminderRecoverySync();
+      const ok = await syncServiceWorkerReminderSchedule(data.notes, nextSettings);
+      if (ok) setLastReminderSyncAt(new Date().toISOString());
+      await syncServerRemindersBestEffort(data.notes, nextSettings);
+      await showServiceWorkerTestNotification();
+      setStatusVoice('Уведомления включены после первого касания.', false);
+    };
+
+    window.addEventListener('pointerdown', onFirstTouch, { once: true });
+    window.addEventListener('touchstart', onFirstTouch, { once: true });
+    return () => {
+      cancelled = true;
+      window.removeEventListener('pointerdown', onFirstTouch);
+      window.removeEventListener('touchstart', onFirstTouch);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInstalled]);
 
 
   useEffect(() => {
