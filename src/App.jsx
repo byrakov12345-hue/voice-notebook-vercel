@@ -717,6 +717,10 @@ function extractItems(text) {
     .filter(Boolean);
 }
 
+function sanitizeShoppingContent(text) {
+  return extractItems(text).join(', ');
+}
+
 function deriveShoppingListTitle(items, text = '') {
   const normalizedItems = (items || []).map(item => normalize(item)).filter(Boolean);
   const source = normalize([text, ...normalizedItems].join(' '));
@@ -792,12 +796,13 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
     if (isTimedShoppingCommand(text)) {
       const eventMeta = parseVoiceAppointmentDateTime(text);
       const timedReminder = eventMeta.time || '09:00';
+      const cleanShoppingContent = sanitizeShoppingContent(content);
       return {
         id: uid('note'),
         type: 'appointment',
         folder,
         title: deriveShoppingListTitle(items, content),
-        content: items.join(', '),
+        content: cleanShoppingContent,
         items,
         dateLabel: eventMeta.dateLabel || formatCalendarDateLabel(new Date(eventMeta.eventAt || Date.now())),
         time: eventMeta.time || '09:00',
@@ -1925,6 +1930,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
       ? latestList.items
       : extractItems(latestList.content || '');
     const mergedItems = [...new Set([...(latestItems || []), ...items].map(item => String(item || '').trim()).filter(Boolean))];
+    const mergedContent = sanitizeShoppingContent(mergedItems.join(', '));
     const mergedTitle = latestList.title && latestList.title !== 'Покупки'
       ? latestList.title
       : deriveShoppingListTitle(mergedItems, rawText || mergedItems.join(', '));
@@ -1936,7 +1942,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
           ...note,
           title: mergedTitle,
           items: mergedItems,
-          content: mergedItems.join(', '),
+          content: mergedContent,
           updatedAt: new Date().toISOString(),
           tags: [...new Set(['покупки', 'магазин', ...mergedItems])]
         }
