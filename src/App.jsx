@@ -717,6 +717,7 @@ function deriveShoppingListTitle(items, text = '') {
 
 function isShoppingAppendCommand(text) {
   const source = normalize(text);
+  if (includesAny(source, ['добавь к', 'добавь в', 'добавь еще в', 'добавь ещё в'])) return true;
   return includesAny(source, ['добавь', 'еще', 'ещё']) && inferType(text) === 'shopping_list';
 }
 
@@ -1867,11 +1868,17 @@ export default function App() {
     }).catch(() => {});
   }
 
-  function findLatestCompatibleShoppingList(folderName, items) {
+function findLatestCompatibleShoppingList(folderName, items) {
     const lists = [...data.notes]
-      .filter(note => note.folder === folderName && note.type === 'shopping_list')
+      .filter(note => note.folder === folderName && (note.type === 'shopping_list' || note.type === 'appointment'))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return lists.find(note => shouldAppendShoppingList(items, note)) || null;
+    return lists.find(note => {
+      if (note.type === 'shopping_list') return shouldAppendShoppingList(items, note);
+      const appointmentItems = Array.isArray(note.items) && note.items.length
+        ? note.items
+        : extractItems(note.content || '');
+      return shouldAppendShoppingList(items, { ...note, type: 'shopping_list', items: appointmentItems });
+    }) || null;
   }
 
   function appendToLatestShoppingList(folderName, items, rawText = '') {
@@ -1879,7 +1886,10 @@ export default function App() {
     const latestList = findLatestCompatibleShoppingList(folderName, items);
     if (!latestList) return false;
 
-    const mergedItems = [...new Set([...(latestList.items || []), ...items].map(item => String(item || '').trim()).filter(Boolean))];
+    const latestItems = Array.isArray(latestList.items) && latestList.items.length
+      ? latestList.items
+      : extractItems(latestList.content || '');
+    const mergedItems = [...new Set([...(latestItems || []), ...items].map(item => String(item || '').trim()).filter(Boolean))];
     const mergedTitle = latestList.title && latestList.title !== 'Покупки'
       ? latestList.title
       : deriveShoppingListTitle(mergedItems, rawText || mergedItems.join(', '));

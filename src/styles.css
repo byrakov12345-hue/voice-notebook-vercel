@@ -224,6 +224,7 @@ p { color: var(--text-soft); line-height: 1.55; }
 .folder-note-copy { min-width: 0; display: grid; gap: 3px; }
 .folder-note-title, .folder-note-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-note-preview, .folder-note-item small { color: var(--muted); }
+.folder-note-item small { flex: 0 0 auto; white-space: nowrap; text-align: right; }
 .folder-note-detail { color: var(--text-soft); background: rgba(2, 6, 23, 0.34); border-radius: 16px; padding: 10px; overflow-wrap: anywhere; }
 .folder-note-list { margin: 0; padding-left: 18px; }
 .folder-note-empty, .empty { color: var(--muted); border: 1px dashed rgba(255, 255, 255, 0.16); border-radius: 18px; padding: 14px; text-align: center; }
@@ -520,6 +521,12 @@ p { color: var(--text-soft); line-height: 1.55; }
   .ai-comm-panel.mobile-active,
   .calendar-panel.mobile-active {
     align-content: start;
+  }
+  .folders.mobile-active {
+    max-height: calc(100dvh - 104px);
+    overflow: auto;
+    padding-bottom: 96px;
+    -webkit-overflow-scrolling: touch;
   }
   .ai-comm-panel.mobile-active {
     grid-template-rows: auto auto auto auto min-content;
