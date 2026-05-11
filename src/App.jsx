@@ -36,7 +36,7 @@ import {
   getPeriodRange,
   notesForCalendarDate as notesForCalendarDateByDate
 } from './lib/notebookCalendar';
-import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isMobileBrowserTabMode, isNotificationSupported, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
+import { buildAppointmentNote, buildNotificationOptions, buildReminderDefaults, buildReminderPoints, buildReminderStatusMessage, buildReminderSummary, enableReminderNotifications, isMobileBrowserTabMode, isNotificationSupported, queueServerPushReminderSchedule, registerReminderRecoverySync, requestNotificationPermission, resolveReminderTimes, showReminderNotification, showServiceWorkerTestNotification, supportsScheduledNotifications, syncServerPushReminderSchedule, syncServerPushReminderScheduleInServiceWorker, syncServiceWorkerReminderSchedule } from './lib/notebookReminders';
 import {
   extractAllTimes as extractVoiceAllTimes,
   parseAppointmentDateTime as parseVoiceAppointmentDateTime,
@@ -52,6 +52,7 @@ const LEGACY_STORAGE_KEYS = ['smart_voice_notebook_live_v1'];
 const VOICE_STORAGE_KEY = 'smart_voice_notebook_voice_v1';
 const VOICE_STYLE_STORAGE_KEY = 'smart_voice_notebook_voice_style_v1';
 const REMINDER_STORAGE_KEY = 'smart_voice_notebook_reminders_v1';
+const INSTALL_PROMPT_DISMISSED_KEY = 'smart_voice_notebook_install_dismissed_v1';
 
 function makeInitialData() {
   const now = new Date().toISOString();
@@ -108,6 +109,11 @@ function hasDateOrTime(text) {
 
 function extractAppointmentTime(text) {
   const source = normalize(text);
+  if (source.includes('полдень') || source.includes('в обед') || source.includes('днем') || source.includes('днём')) return '12:00';
+  if (source.includes('полночь')) return '00:00';
+  if (source.includes('утром') && !/\d/.test(source)) return '09:00';
+  if ((source.includes('вечером') || source.includes('к вечеру')) && !/\d/.test(source)) return '20:00';
+  if ((source.includes('ночью') || source.includes('к ночи')) && !/\d/.test(source)) return '22:00';
   const tokens = source.split(' ');
 
   const clock = source.match(/\b(\d{1,2})[:.](\d{2})\b(?:\s+(утра|дня|вечера|ночи))?/);
@@ -228,6 +234,11 @@ function extractAppointmentMeta(text) {
 function extractAllTimes(text) {
   const source = normalize(text);
   const times = [];
+  if (source.includes('полдень') || source.includes('в обед') || source.includes('днем') || source.includes('днём')) times.push('12:00');
+  if (source.includes('полночь')) times.push('00:00');
+  if (source.includes('утром') && !/\d/.test(source)) times.push('09:00');
+  if ((source.includes('вечером') || source.includes('к вечеру')) && !/\d/.test(source)) times.push('20:00');
+  if ((source.includes('ночью') || source.includes('к ночи')) && !/\d/.test(source)) times.push('22:00');
   const clockMatches = [...source.matchAll(/\b(\d{1,2})[:.](\d{2})\b(?:\s+(утра|дня|вечера|ночи))?/g)];
   clockMatches.forEach(match => {
     let hour = Number(match[1]);
@@ -453,6 +464,17 @@ function resolveExplicitFolderName(rawName) {
     коды: 'Коды и комбинации',
     клиент: 'Клиенты',
     клиенты: 'Клиенты',
+    проект: 'Проекты',
+    проекты: 'Проекты',
+    сделка: 'Сделки',
+    сделки: 'Сделки',
+    счет: 'Счета',
+    счёт: 'Счета',
+    счета: 'Счета',
+    звонок: 'Звонки',
+    звонки: 'Звонки',
+    дедлайн: 'Дедлайны',
+    дедлайны: 'Дедлайны',
     расход: 'Расходы',
     расходы: 'Расходы',
     работа: 'Работа',
@@ -617,6 +639,11 @@ function chooseFolder(text) {
   if (includesAny(source, ['телефон', 'номер', 'контакт'])) return 'Контакты';
   if (includesAny(source, ['код', 'комбинац', 'цифр', 'пароль'])) return 'Коды и комбинации';
   if (includesAny(source, ['клиент', 'заказчик', 'цена'])) return 'Клиенты';
+  if (includesAny(source, ['проект', 'спринт', 'тз', 'релиз'])) return 'Проекты';
+  if (includesAny(source, ['сделка', 'лид', 'продажа', 'воронка'])) return 'Сделки';
+  if (includesAny(source, ['счет', 'счёт', 'инвойс', 'акт'])) return 'Счета';
+  if (includesAny(source, ['звонок', 'созвон', 'перезвонить', 'связаться'])) return 'Звонки';
+  if (includesAny(source, ['дедлайн', 'срок', 'до пятницы', 'до конца дня'])) return 'Дедлайны';
   if (includesAny(source, ['машина', 'авто', 'гараж', 'масло', 'бензин'])) return 'Машина';
   if (includesAny(source, ['дом', 'квартира', 'ремонт'])) return 'Дом';
   if (includesAny(source, ['задача', 'надо', 'нужно', 'сделать'])) return 'Задачи';
@@ -1111,6 +1138,14 @@ export default function App() {
   const [expandedFolders, setExpandedFolders] = useState({});
   const [expandedNotes, setExpandedNotes] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [installPromptDismissed, setInstallPromptDismissed] = useState(() => {
+    try { return localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY) === '1'; } catch { return false; }
+  });
+  const [isInstalled, setIsInstalled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone);
+  });
   const [mobilePanel, setMobilePanel] = useState('voice');
   const [voiceOptions, setVoiceOptions] = useState([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
@@ -1159,6 +1194,7 @@ export default function App() {
   const processingCommandRef = useRef(false);
   const lastSavedRef = useRef({ signature: '', at: 0 });
   const firedReminderRef = useRef(new Set());
+  const lastServerBackupSyncRef = useRef(0);
 
   const selectedNote = data.notes.find(n => n.id === selectedId) || null;
   const speechSupported = Boolean(SpeechRecognition);
@@ -1198,6 +1234,40 @@ export default function App() {
   useEffect(() => {
     if (selectedVoiceURI) localStorage.setItem(VOICE_STORAGE_KEY, selectedVoiceURI);
   }, [selectedVoiceURI]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const media = window.matchMedia?.('(display-mode: standalone)');
+    const syncInstalledState = () => {
+      const installed = Boolean(window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone);
+      setIsInstalled(installed);
+      if (installed) {
+        setInstallPromptEvent(null);
+        setInstallPromptDismissed(true);
+        try { localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, '1'); } catch {}
+      }
+    };
+
+    const handleBeforeInstallPrompt = event => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+      try {
+        if (localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY) !== '1') setInstallPromptDismissed(false);
+      } catch {}
+    };
+
+    const handleAppInstalled = () => syncInstalledState();
+
+    syncInstalledState();
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    media?.addEventListener?.('change', syncInstalledState);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      media?.removeEventListener?.('change', syncInstalledState);
+    };
+  }, []);
 
   useEffect(() => {
     const savedStyle = localStorage.getItem(VOICE_STYLE_STORAGE_KEY);
@@ -1292,7 +1362,6 @@ export default function App() {
       if (cancelled) return;
       const ok = await syncServiceWorkerReminderSchedule(data.notes, reminderSettings);
       if (ok) setLastReminderSyncAt(new Date().toISOString());
-      await syncServerRemindersBestEffort(data.notes, reminderSettings);
       await registerReminderRecoverySync();
     };
     sync();
@@ -1306,6 +1375,29 @@ export default function App() {
       window.removeEventListener('focus', sync);
       window.removeEventListener('pageshow', sync);
       document.removeEventListener('visibilitychange', sync);
+    };
+  }, [data.notes, reminderSettings]);
+
+  useEffect(() => {
+    if (!reminderSettings.enabled || !isNotificationSupported() || Notification.permission !== 'granted') return undefined;
+    const backup = () => {
+      queueServerPushReminderSchedule(data.notes, reminderSettings);
+      const nowTs = Date.now();
+      if (nowTs - lastServerBackupSyncRef.current > 10 * 60 * 1000) {
+        lastServerBackupSyncRef.current = nowTs;
+        syncServerRemindersBestEffort(data.notes, reminderSettings).catch(() => ({ ok: false }));
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') backup();
+    };
+    window.addEventListener('pagehide', backup);
+    window.addEventListener('beforeunload', backup);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', backup);
+      window.removeEventListener('beforeunload', backup);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [data.notes, reminderSettings]);
 
@@ -1680,7 +1772,7 @@ export default function App() {
           setStatusVoice('Запись сохранена. Телефон пока не подтвердил локальную память напоминания.', false);
         }
       });
-      syncServerRemindersBestEffort(notesForSync, nextSettings).catch(() => ({ ok: false }));
+      queueServerPushReminderSchedule(notesForSync, nextSettings);
       registerReminderRecoverySync();
       if (isMobileBrowserTabMode()) {
         setStatusVoice('Для стабильных фоновых уведомлений на телефоне откройте блокнот с главного экрана, не из вкладки браузера.', false);
@@ -2724,11 +2816,39 @@ export default function App() {
     processCommand(text);
   }
 
+  async function promptInstallApp() {
+    if (isInstalled) {
+      setStatusVoice('Приложение уже установлено.', false);
+      return;
+    }
+    if (installPromptEvent?.prompt) {
+      try {
+        await installPromptEvent.prompt();
+        const choice = await installPromptEvent.userChoice;
+        if (choice?.outcome === 'accepted') {
+          setInstallPromptEvent(null);
+          setInstallPromptDismissed(true);
+          try { localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, '1'); } catch {}
+          setStatusVoice('Установка приложения запущена.', false);
+          return;
+        }
+      } catch {}
+    }
+    setStatusVoice('Откройте меню браузера и выберите «Установить приложение» / «Добавить на главный экран».', false);
+  }
+
+  function dismissInstallCard() {
+    setInstallPromptDismissed(true);
+    try { localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, '1'); } catch {}
+  }
+
   function selectMobilePanel(panel) {
     setMobilePanel(panel);
     if (panel === 'calendar') setCalendarOpen(true);
     if (panel === 'settings') setSettingsOpen(true);
   }
+
+  const shouldShowInstallPrompt = !isInstalled && !installPromptDismissed;
 
   return (
     <div className="app-shell">
@@ -2749,6 +2869,7 @@ export default function App() {
               <button type="button" className="tool-button" onClick={() => { setCalendarOpen(value => !value); selectMobilePanel('calendar'); }}>
                 {calendarOpen ? 'Свернуть календарь' : 'Календарь'}
               </button>
+              {!isInstalled ? <button type="button" className="tool-button" onClick={promptInstallApp}>Установить приложение</button> : null}
               <button type="button" className="tool-button" onClick={enableNotifications}>Тест уведомления</button>
             </div>
           </section>
@@ -2773,36 +2894,11 @@ export default function App() {
                   <strong>Стиль речи</strong>
                 </div>
                 <div className="voice-style-list">
-                  {['default', 'male', 'child', 'robot'].map(style => (
-                    <button
-                      type="button"
-                      key={style}
-                      className={selectedVoiceStyle === style ? 'voice-style-option active' : 'voice-style-option'}
-                      onClick={() => {
-                        setSelectedVoiceStyle(style);
-                        speak(`Выбран стиль ${getVoiceStyleConfig(style).label}`, selectedVoiceURI, style);
-                      }}
-                    >
-                      {getVoiceStyleConfig(style).label}
-                    </button>
-                  ))}
+                  <button type="button" className="voice-style-option active" disabled>
+                    {getVoiceStyleConfig('default').label}
+                  </button>
                 </div>
-                <div className="voice-list">
-                  {voiceOptions.length ? voiceOptions.map(voice => (
-                    <button
-                      type="button"
-                      key={voice.voiceURI}
-                      className={selectedVoiceURI === voice.voiceURI ? 'voice-option active' : 'voice-option'}
-                      onClick={() => {
-                        setSelectedVoiceURI(voice.voiceURI);
-                        speak(`Выбран голос ${voice.name}`, voice.voiceURI, selectedVoiceStyle);
-                      }}
-                    >
-                      <span>{voiceDisplayMeta(voice).title}</span>
-                      <small>{voiceDisplayMeta(voice).subtitle}</small>
-                    </button>
-                  )) : <div className="folder-note-empty">Голоса браузера пока не загрузились</div>}
-                </div>
+                <div className="folder-note-empty">Используется один стандартный голос устройства.</div>
                 <div className="settings-head nested">
                   <strong>Напоминания</strong>
                   <label className="switch">
@@ -2976,6 +3072,16 @@ export default function App() {
 
         <main className="center-notebook" aria-label="Записи блокнота">
           <section className={`panel notes mobile-panel ${mobilePanel === 'notes' ? 'mobile-active' : ''}`}>
+            {shouldShowInstallPrompt ? (
+              <div className="install-card">
+                <div>
+                  <strong>Установить АИ Блокнот</strong>
+                  <span>Для стабильной фоновой работы и уведомлений.</span>
+                </div>
+                <button type="button" className="primary" onClick={promptInstallApp}>Установить</button>
+                <button type="button" onClick={dismissInstallCard} aria-label="Скрыть">×</button>
+              </div>
+            ) : null}
             <div className="notes-head">
               <div>
                 <p className="eyebrow">Записи</p>

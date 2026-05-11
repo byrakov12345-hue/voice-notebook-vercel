@@ -12,6 +12,11 @@ jobs:
       - name: Call reminder dispatcher
         env:
           REMINDERS_DISPATCH_URL: ${{ vars.REMINDERS_DISPATCH_URL }}
+          REMINDERS_DISPATCH_TOKEN: ${{ secrets.CRON_SECRET }}
         run: |
           URL="${REMINDERS_DISPATCH_URL:-https://voice-notebook-vercel.vercel.app/api/reminders-dispatch}"
-          curl -fsS --retry 2 --max-time 20 "$URL"
+          if [ -n "$REMINDERS_DISPATCH_TOKEN" ]; then
+            curl -fsS --retry 2 --max-time 20 -H "Authorization: Bearer $REMINDERS_DISPATCH_TOKEN" "$URL"
+          else
+            curl -fsS --retry 2 --max-time 20 "$URL"
+          fi

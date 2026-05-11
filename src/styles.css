@@ -228,6 +228,20 @@ p { color: var(--text-soft); line-height: 1.55; }
 .folder-note-list { margin: 0; padding-left: 18px; }
 .folder-note-empty, .empty { color: var(--muted); border: 1px dashed rgba(255, 255, 255, 0.16); border-radius: 18px; padding: 14px; text-align: center; }
 .folder-tools { display: grid; grid-template-columns: 1fr; gap: 8px; padding-top: 8px; }
+.install-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(103, 232, 249, 0.26);
+  border-radius: 16px;
+  padding: 10px;
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.18), rgba(2, 6, 23, 0.48));
+}
+.install-card div { min-width: 0; display: grid; gap: 2px; }
+.install-card strong { font-size: 14px; }
+.install-card span { font-size: 12px; color: var(--text-soft); }
+.install-card button { min-height: 36px; padding: 7px 10px; }
 
 .notes { min-height: calc(100vh - 40px); display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 14px; }
 .notes-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 360px); gap: 12px; align-items: end; }
@@ -547,6 +561,8 @@ p { color: var(--text-soft); line-height: 1.55; }
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 0 13px 13px;
   }
+  .install-card { grid-template-columns: 1fr; }
+  .install-card button { width: 100%; }
   .folders-head > span {
     min-width: 36px;
     height: 36px;

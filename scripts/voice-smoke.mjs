@@ -27,6 +27,22 @@ const futureShopping = parseAppointmentDateTime('купить батон 9 ма�
 assert.equal(isoDay(futureShopping.eventAt), '2026-05-09');
 assert.equal(futureShopping.time, '20:00');
 
+const noonCase = parseAppointmentDateTime('завтра в обед встреча с клиентом', fixedNow);
+assert.equal(noonCase.dateLabel, 'завтра');
+assert.equal(noonCase.time, '12:00');
+
+const midnightCase = parseAppointmentDateTime('завтра в полночь проверить отчёт', fixedNow);
+assert.equal(midnightCase.dateLabel, 'завтра');
+assert.equal(midnightCase.time, '00:00');
+
+const morningWordCase = parseAppointmentDateTime('завтра утром купить батон', fixedNow);
+assert.equal(morningWordCase.dateLabel, 'завтра');
+assert.equal(morningWordCase.time, '09:00');
+
+const eveningWordCase = parseAppointmentDateTime('завтра вечером позвонить другу', fixedNow);
+assert.equal(eveningWordCase.dateLabel, 'завтра');
+assert.equal(eveningWordCase.time, '20:00');
+
 const explicitReminderPoints = buildReminderPoints({
   id: 'note-test',
   type: 'appointment',

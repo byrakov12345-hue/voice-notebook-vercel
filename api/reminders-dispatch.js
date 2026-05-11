@@ -46,7 +46,8 @@ export default async function handler(req, res) {
   webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
 
   const now = Date.now();
-  const dueWindowMs = 30 * 1000;
+  const dueWindowMs = 5 * 60 * 1000;
+  const overdueGraceMs = 24 * 60 * 60 * 1000;
   let sent = 0;
   let failed = 0;
   let removed = 0;
@@ -64,10 +65,19 @@ export default async function handler(req, res) {
         continue;
       }
 
-      const reminders = pruneReminderList(record.reminders || [], now);
+      const reminders = pruneReminderList(record.reminders || [], now)
+        .slice()
+        .sort((a, b) => Number(a?.at || 0) - Number(b?.at || 0));
       for (const reminder of reminders) {
         const at = Number(reminder.at);
-        if (reminder.sent || !Number.isFinite(at) || at > now + dueWindowMs) continue;
+        if (reminder.sent || !Number.isFinite(at)) continue;
+        if (at < now - overdueGraceMs) {
+          reminder.sent = true;
+          reminder.sentAt = new Date().toISOString();
+          changed = true;
+          continue;
+        }
+        if (at > now + dueWindowMs) continue;
 
         try {
           await webpush.sendNotification(record.subscription, pushPayload(reminder));
