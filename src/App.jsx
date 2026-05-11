@@ -1219,14 +1219,12 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
           !hasDuplicateBody ? <p>{note.content}</p> : null
         )}
       </button>
-      <div className="actions">
-        {note.type === 'contact' && note.phone && <button onClick={() => onCall(note)}>Позвонить</button>}
-        {note.type === 'contact' && note.phone && <button onClick={() => onMessage(note)}>Написать</button>}
-        <button onClick={() => onShare(note)}>Поделиться</button>
-        <button onClick={() => onCopy(note)}>Копировать</button>
-        {onRestore && <button onClick={() => onRestore(note)}>Восстановить</button>}
-        <button className="danger" onClick={() => onDelete(note)}>Удалить</button>
-      </div>
+      {note.type === 'contact' && note.phone ? (
+        <div className="actions">
+          <button onClick={() => onCall(note)}>Позвонить</button>
+          <button onClick={() => onMessage(note)}>Написать</button>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -2189,10 +2187,12 @@ function findLatestCompatibleShoppingList(folderName, items) {
     const appointmentMeta = extractAppointmentMeta(content);
     const dayItems = notesForCalendarDate(calendarSelectedDate);
     const normalizedContent = normalizeCalendarReminderText(normalizedEntryContent);
-    const sameDayExisting = dayItems.find(item => normalizeCalendarReminderText(item.content || '') === normalizedContent)
-      || dayItems.find(item => String(item.time || '') === noteTime && normalize(item.title || '') === normalize('Еда'))
-      || (isShoppingText ? dayItems.find(item => normalize(item.title || '') === normalize('Еда')) : null);
-    if (sameDayExisting) {
+    const sameDayExisting = isShoppingText
+      ? dayItems.find(item => normalizeCalendarReminderText(item.content || '') === normalizedContent)
+        || dayItems.find(item => String(item.time || '') === noteTime && normalize(item.title || '') === normalize('Еда'))
+        || dayItems.find(item => normalize(item.title || '') === normalize('Еда'))
+      : null;
+    if (isShoppingText && sameDayExisting) {
       updateCalendarAppointmentNote(
         sameDayExisting.id,
         normalizedEntryContent,
@@ -2252,12 +2252,12 @@ function findLatestCompatibleShoppingList(folderName, items) {
     const folder = resolveSaveFolder(content, 'appointment', preferredFolder);
     const appointmentMeta = extractAppointmentMeta(content);
     const dayItems = notesForCalendarDate(calendarSelectedDate);
-    const sameDayExisting = dayItems.find(item => normalizeCalendarReminderText(item.content || '') === normalizedContent)
-      || dayItems.find(item => String(item.time || '') === noteTime && normalize(item.title || '') === normalize('Еда'))
-      || (isShoppingText
-        ? dayItems.find(item => normalize(item.title || '') === normalize('Еда'))
-        : null);
-    if (sameDayExisting) {
+    const sameDayExisting = isShoppingText
+      ? dayItems.find(item => normalizeCalendarReminderText(item.content || '') === normalizedContent)
+        || dayItems.find(item => String(item.time || '') === noteTime && normalize(item.title || '') === normalize('Еда'))
+        || dayItems.find(item => normalize(item.title || '') === normalize('Еда'))
+      : null;
+    if (isShoppingText && sameDayExisting) {
       updateCalendarAppointmentNote(
         sameDayExisting.id,
         normalizedEntryContent,
@@ -3306,6 +3306,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
                 <div>
                   <button type="button" onClick={() => copyNote(selectedNote)}>Копировать</button>
                   <button type="button" onClick={() => shareNote(selectedNote)}>Поделиться</button>
+                  <button type="button" className="danger" onClick={() => deleteNoteNow(selectedNote)}>Удалить</button>
                 </div>
               </div>
             ) : null}
