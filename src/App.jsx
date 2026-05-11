@@ -721,6 +721,17 @@ function isShoppingAppendCommand(text) {
   return includesAny(source, ['добавь', 'еще', 'ещё']) && inferType(text) === 'shopping_list';
 }
 
+function extractShoppingAppendItems(text) {
+  const base = String(text || '')
+    .replace(/\s+и\s+(оповещ|уведомл|напоминан).*/i, '')
+    .replace(/^(добавь|добавить)\s+/i, '')
+    .replace(/^к\s+[а-яa-z0-9-]+\s*/i, '')
+    .trim();
+  return extractItems(base)
+    .map(item => item.replace(/^к\s+[а-яa-z0-9-]+\s*/i, '').trim())
+    .filter(item => item && !includesAny(normalize(item), ['оповещ', 'уведомл', 'напоминан']));
+}
+
 function extractContact(text) {
   const phone = extractPhone(text);
   let rest = String(text || '')
@@ -2755,6 +2766,14 @@ function findLatestCompatibleShoppingList(folderName, items) {
         setSuggestedFolder('');
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return setStatusVoice(`Папка ${folderName} создана или уже существует.`);
+      }
+
+      if (isShoppingAppendCommand(spoken)) {
+        const items = extractShoppingAppendItems(spoken);
+        if (items.length && appendToLatestShoppingList('Покупки', items, spoken)) {
+          lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+          return;
+        }
       }
 
       if (useAI) {

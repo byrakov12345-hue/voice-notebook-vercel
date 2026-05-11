@@ -534,6 +534,12 @@ p { color: var(--text-soft); line-height: 1.55; }
   .settings-panel.compact.mobile-active {
     grid-template-rows: auto auto;
   }
+  .settings-panel.mobile-active {
+    max-height: calc(100dvh - 104px);
+    overflow: auto;
+    padding-bottom: 96px;
+    -webkit-overflow-scrolling: touch;
+  }
   .settings-panel.mobile-active .voice-list {
     max-height: 28dvh;
   }
