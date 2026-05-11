@@ -1200,6 +1200,13 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
     : '';
   const noteTitle = String(note.title || '').trim() || (note.type === 'appointment' ? 'Встреча' : 'Без названия');
   const appointmentText = [appointmentBody, appointmentFallback].find(Boolean) || 'Текст встречи пуст.';
+  const plainBody = note.type === 'shopping_list'
+    ? (note.items || []).join(', ')
+    : note.type === 'contact'
+      ? [note.phone ? `Телефон: ${note.phone}` : '', note.description ? `Описание: ${note.description}` : ''].filter(Boolean).join('\n')
+      : note.type === 'appointment'
+        ? `Когда: ${[note.dateLabel, note.time].filter(Boolean).join(', ') || 'не указано'}\n${appointmentText}`
+        : (!hasDuplicateBody ? String(note.content || '') : '');
   return (
     <article className={`note-card ${selected ? 'selected' : ''}`}>
       <div
@@ -1219,22 +1226,9 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
           <small>{formatDate(note.createdAt)}</small>
         </div>
         <h3>{displayIndex ? `${displayIndex}. ` : ''}{noteTitle}</h3>
-        {note.type === 'shopping_list' ? (
-          <ul>{(note.items || []).map((item, i) => <li key={`${note.id}_${i}`}>{item}</li>)}</ul>
-        ) : note.type === 'contact' ? (
-          <p><b>Телефон:</b> {note.phone || 'не распознан'}{note.description ? <><br /><b>Описание:</b> {note.description}</> : null}</p>
-        ) : note.type === 'appointment' ? (
-          <p>
-            <b>Когда:</b> {[note.dateLabel, note.time].filter(Boolean).join(', ') || 'не указано'}
-            {note.actionLabel ? <><br /><b>Действие:</b> {note.actionLabel}</> : null}
-            {note.placeLabel ? <><br /><b>Место:</b> {note.placeLabel}</> : null}
-            {note.codeLabel ? <><br /><b>Код:</b> {note.codeLabel}</> : null}
-            <br />{appointmentText}
-          </p>
-        ) : (
-          !hasDuplicateBody ? <p>{note.content}</p> : null
-        )}
+        <p>{plainBody || 'Текст записи пуст.'}</p>
       </div>
+      <div className="note-actions-label">Действия записи</div>
       <div className="actions note-actions">
         <button type="button" onClick={() => onCopy(note)}>Копировать</button>
         <button type="button" onClick={() => onShare(note)}>Поделиться</button>
