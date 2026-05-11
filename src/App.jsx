@@ -111,6 +111,10 @@ function hasDateOrTime(text) {
 
 function extractAppointmentTime(text) {
   const source = normalize(text);
+  const hasEveningHint = source.includes('вечером') || source.includes('к вечеру');
+  const hasDayHint = source.includes('днем') || source.includes('днём') || source.includes('дня');
+  const hasMorningHint = source.includes('утром') || source.includes('утра');
+  const hasNightHint = source.includes('ночью') || source.includes('к ночи') || source.includes('ночи');
   if (source.includes('полдень') || source.includes('в обед') || source.includes('днем') || source.includes('днём')) return '12:00';
   if (source.includes('полночь')) return '00:00';
   if (source.includes('утром') && !/\d/.test(source)) return '09:00';
@@ -126,6 +130,13 @@ function extractAppointmentTime(text) {
     if (suffix === 'вечера' && hour < 12) hour += 12;
     else if (suffix === 'дня' && hour < 12) hour += 12;
     else if (suffix === 'ночи' && hour === 12) hour = 0;
+    else if (!suffix) {
+      if (hasEveningHint && hour < 12) hour += 12;
+      else if (hasDayHint && hour < 12) hour += 12;
+      else if (hasNightHint && hour === 12) hour = 0;
+      else if (hasNightHint && hour >= 5 && hour < 12) hour += 12;
+      else if (hasMorningHint && hour === 12) hour = 0;
+    }
     return `${String(hour).padStart(2, '0')}:${minute}`;
   }
 
@@ -236,6 +247,10 @@ function extractAppointmentMeta(text) {
 function extractAllTimes(text) {
   const source = normalize(text);
   const times = [];
+  const hasEveningHint = source.includes('вечером') || source.includes('к вечеру');
+  const hasDayHint = source.includes('днем') || source.includes('днём') || source.includes('дня');
+  const hasMorningHint = source.includes('утром') || source.includes('утра');
+  const hasNightHint = source.includes('ночью') || source.includes('к ночи') || source.includes('ночи');
   if (source.includes('полдень') || source.includes('в обед') || source.includes('днем') || source.includes('днём')) times.push('12:00');
   if (source.includes('полночь')) times.push('00:00');
   if (source.includes('утром') && !/\d/.test(source)) times.push('09:00');
@@ -249,6 +264,13 @@ function extractAllTimes(text) {
     if (suffix === 'вечера' && hour < 12) hour += 12;
     else if (suffix === 'дня' && hour < 12) hour += 12;
     else if (suffix === 'ночи' && hour === 12) hour = 0;
+    else if (!suffix) {
+      if (hasEveningHint && hour < 12) hour += 12;
+      else if (hasDayHint && hour < 12) hour += 12;
+      else if (hasNightHint && hour === 12) hour = 0;
+      else if (hasNightHint && hour >= 5 && hour < 12) hour += 12;
+      else if (hasMorningHint && hour === 12) hour = 0;
+    }
     times.push(`${String(hour).padStart(2, '0')}:${minute}`);
   });
   const tokens = source.split(' ');

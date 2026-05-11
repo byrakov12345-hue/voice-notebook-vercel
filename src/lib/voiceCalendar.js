@@ -19,6 +19,10 @@ const REVERSE_MONTH_DATE_REGEX = new RegExp(`(?:^|\\s)${MONTH_TOKEN_PATTERN}\\s+
 export function extractAllTimes(text) {
   const source = normalizeVoiceText(text);
   const times = [];
+  const hasEveningHint = source.includes('вечером') || source.includes('к вечеру');
+  const hasDayHint = source.includes('днем') || source.includes('днём') || source.includes('дня');
+  const hasMorningHint = source.includes('утром') || source.includes('утра');
+  const hasNightHint = source.includes('ночью') || source.includes('к ночи') || source.includes('ночи');
   if (source.includes('полдень') || source.includes('в обед') || source.includes('днем') || source.includes('днём')) times.push('12:00');
   if (source.includes('полночь')) times.push('00:00');
   if (source.includes('утром') && !/\d/.test(source)) times.push('09:00');
@@ -33,6 +37,13 @@ export function extractAllTimes(text) {
     if (suffix === 'вечера' && hour < 12) hour += 12;
     else if (suffix === 'дня' && hour < 12) hour += 12;
     else if (suffix === 'ночи' && hour === 12) hour = 0;
+    else if (!suffix) {
+      if (hasEveningHint && hour < 12) hour += 12;
+      else if (hasDayHint && hour < 12) hour += 12;
+      else if (hasNightHint && hour === 12) hour = 0;
+      else if (hasNightHint && hour >= 5 && hour < 12) hour += 12;
+      else if (hasMorningHint && hour === 12) hour = 0;
+    }
     times.push(`${String(hour).padStart(2, '0')}:${minute}`);
   });
   const tokens = source.split(' ');
