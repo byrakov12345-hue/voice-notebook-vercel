@@ -444,6 +444,13 @@ function buildCalendarReminderTitle(text) {
   return cleanTitle(normalizedText, 'Напоминание');
 }
 
+function normalizeTimedShoppingContent(text) {
+  const items = extractItems(text);
+  if (items.length) return items.join(', ');
+  const fallback = normalizeCalendarReminderText(text);
+  return fallback || String(text || '').trim();
+}
+
 function resolveExplicitFolderName(rawName) {
   const clean = normalize(rawName).replace(/[^a-zа-я0-9 -]/gi, '').trim();
   if (!clean) return '';
@@ -2070,18 +2077,19 @@ export default function App() {
     const [hour, minute] = noteTime.split(':').map(Number);
     selectedDate.setHours(hour || 0, minute || 0, 0, 0);
     const type = inferType(content);
+    const isShoppingText = type === 'shopping_list';
+    const normalizedEntryContent = isShoppingText ? normalizeTimedShoppingContent(content) : content;
     const folder = resolveFolderName(content, type === 'note' ? 'appointment' : type);
     const appointmentMeta = extractAppointmentMeta(content);
     const dayItems = notesForCalendarDate(calendarSelectedDate);
-    const normalizedContent = normalizeCalendarReminderText(content);
-    const isShoppingText = inferType(content) === 'shopping_list';
+    const normalizedContent = normalizeCalendarReminderText(normalizedEntryContent);
     const sameDayExisting = dayItems.find(item => normalizeCalendarReminderText(item.content || '') === normalizedContent)
       || dayItems.find(item => String(item.time || '') === noteTime && normalize(item.title || '') === normalize('Еда'))
       || (isShoppingText ? dayItems.find(item => normalize(item.title || '') === normalize('Еда')) : null);
     if (sameDayExisting) {
       updateCalendarAppointmentNote(
         sameDayExisting.id,
-        content,
+        normalizedEntryContent,
         noteTime,
         {
           firstEnabled: Boolean(reminderSettings.enabled),
@@ -2102,15 +2110,15 @@ export default function App() {
       uid,
       selectedDate,
       folder,
-      title: buildCalendarReminderTitle(content),
-      content,
+      title: isShoppingText ? deriveShoppingListTitle(extractItems(normalizedEntryContent), normalizedEntryContent) : buildCalendarReminderTitle(normalizedEntryContent),
+      content: normalizedEntryContent,
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: noteTime,
       appointmentMeta,
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: noteTime,
       reminderExplicitAt: selectedDate.toISOString(),
-      reminderUseMorningTime: !parsedEvent.time && normalize(content).includes('утром'),
+      reminderUseMorningTime: !parsedEvent.time && normalize(normalizedEntryContent).includes('утром'),
       reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
       reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
       reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled),
@@ -2129,8 +2137,9 @@ export default function App() {
     const selectedDate = new Date(calendarSelectedDate);
     const parsedEvent = parseVoiceAppointmentDateTime(raw);
     const noteTime = parsedEvent.time || String(calendarNoteTime || '09:00');
-    const normalizedContent = normalizeCalendarReminderText(content);
     const isShoppingText = inferType(content) === 'shopping_list';
+    const normalizedEntryContent = isShoppingText ? normalizeTimedShoppingContent(content) : content;
+    const normalizedContent = normalizeCalendarReminderText(normalizedEntryContent);
     const [hour, minute] = noteTime.split(':').map(Number);
     selectedDate.setHours(hour || 0, minute || 0, 0, 0);
 
@@ -2145,7 +2154,7 @@ export default function App() {
     if (sameDayExisting) {
       updateCalendarAppointmentNote(
         sameDayExisting.id,
-        content,
+        normalizedEntryContent,
         noteTime,
         {
           firstEnabled: Boolean(reminderSettings.enabled),
@@ -2166,15 +2175,15 @@ export default function App() {
       uid,
       selectedDate,
       folder,
-      title: buildCalendarReminderTitle(content),
-      content,
+      title: isShoppingText ? deriveShoppingListTitle(extractItems(normalizedEntryContent), normalizedEntryContent) : buildCalendarReminderTitle(normalizedEntryContent),
+      content: normalizedEntryContent,
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: noteTime,
       appointmentMeta,
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: noteTime,
       reminderExplicitAt: selectedDate.toISOString(),
-      reminderUseMorningTime: !parsedEvent.time && normalize(content).includes('утром'),
+      reminderUseMorningTime: !parsedEvent.time && normalize(normalizedEntryContent).includes('утром'),
       reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
       reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
       reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled),
@@ -2213,6 +2222,8 @@ export default function App() {
     }
 
     const content = stripVoiceCalendarVoiceContent(text);
+    const isShoppingText = inferType(content) === 'shopping_list';
+    const normalizedEntryContent = isShoppingText ? normalizeTimedShoppingContent(content) : content;
 
     const allTimes = extractVoiceAllTimes(text);
     const noteTime = allTimes[0] || sameDayNotes[0]?.time || calendarNoteTime || '09:00';
@@ -2220,21 +2231,21 @@ export default function App() {
     const selectedDate = new Date(targetDate);
     const [hour, minute] = String(noteTime).split(':').map(Number);
     selectedDate.setHours(hour || 0, minute || 0, 0, 0);
-    const appointmentMeta = extractAppointmentMeta(content);
-    const folder = resolveFolderName(content, 'appointment');
+    const appointmentMeta = extractAppointmentMeta(normalizedEntryContent);
+    const folder = resolveFolderName(normalizedEntryContent, 'appointment');
     const note = buildAppointmentNote({
       uid,
       selectedDate,
       folder,
-      title: buildCalendarReminderTitle(content),
-      content,
+      title: isShoppingText ? deriveShoppingListTitle(extractItems(normalizedEntryContent), normalizedEntryContent) : buildCalendarReminderTitle(normalizedEntryContent),
+      content: normalizedEntryContent,
       dateLabel: formatCalendarDateLabel(selectedDate),
       time: noteTime,
       appointmentMeta,
       reminderFirstEnabled: Boolean(reminderSettings.enabled),
       reminderMorningTime: noteTime,
       reminderExplicitAt: selectedDate.toISOString(),
-      reminderUseMorningTime: !allTimes[0] && normalize(text).includes('утром'),
+      reminderUseMorningTime: !allTimes[0] && normalize(normalizedEntryContent).includes('утром'),
       reminderOffsetType: reminderSettings.defaultReminderOffset || '1h',
       reminderCustomOffsetMinutes: Number(reminderSettings.customReminderOffsetMinutes || 60),
       reminderSecondEnabled: Boolean(reminderSettings.secondReminderEnabled),
@@ -2243,7 +2254,7 @@ export default function App() {
     setCalendarSelectedDate(new Date(targetDate).toISOString());
     setCalendarNoteTime(noteTime);
 
-    if (!content) {
+    if (!normalizedEntryContent) {
       if (sameDayNotes[0]) {
         updateNoteById(sameDayNotes[0].id, note => ({
           ...note,
@@ -2266,7 +2277,7 @@ export default function App() {
 
     const wantsUpdateExisting = includesAny(source, ['измени', 'обнови', 'поменяй', 'исправь']);
     if (wantsUpdateExisting && sameDayNotes[0]) {
-      updateCalendarAppointmentNote(sameDayNotes[0].id, content, noteTime, {
+      updateCalendarAppointmentNote(sameDayNotes[0].id, normalizedEntryContent, noteTime, {
         firstEnabled: Boolean(reminderSettings.enabled),
         morningTime: noteTime,
         secondTime: '',
