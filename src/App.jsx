@@ -679,6 +679,23 @@ function isTimedShoppingCommand(text) {
 }
 
 function extractItems(text) {
+  const normalizeQuantityUnits = value => String(value || '')
+    .replace(/(\d)\s*(кг|килограмм(?:а|ов)?|кило)\b/gi, '$1 кг')
+    .replace(/(\d)\s*(г|грамм(?:а|ов)?)\b/gi, '$1 г')
+    .replace(/(\d)\s*(л|литр(?:а|ов)?)\b/gi, '$1 л')
+    .replace(/(\d)\s*(мл|миллилитр(?:а|ов)?)\b/gi, '$1 мл')
+    .replace(/(\d)\s*(шт|штук(?:и)?|штука)\b/gi, '$1 шт')
+    .replace(/(\d)\s*(уп|упак(?:овка|овки|овок)?)\b/gi, '$1 уп')
+    .replace(/(\d)\s*(пачк(?:а|и|у)?|пакет(?:а|ов)?)\b/gi, '$1 пачка')
+    .replace(/(\d)\s*(бутылк(?:а|и|у)?|бут)\b/gi, '$1 бут')
+    .replace(/(\d)\s*(м|метр(?:а|ов)?)\b/gi, '$1 м')
+    .replace(/(\d)\s*(см|сантиметр(?:а|ов)?)\b/gi, '$1 см')
+    .replace(/(\d)\s*(мм|миллиметр(?:а|ов)?)\b/gi, '$1 мм')
+    .replace(/полкил(?:о|ограмма)?/gi, '0.5 кг')
+    .replace(/поллитр(?:а)?/gi, '0.5 л')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
   return String(text || '')
     .replace(/^(запомни|запиши|сохрани|добавь)\s*/i, '')
     .replace(/\b(сегодня|завтра|послезавтра)\b/gi, ' ')
@@ -696,7 +713,7 @@ function extractItems(text) {
     .replace(/\s+и\s+/gi, ', ')
     .replace(/\s{2,}/g, ' ')
     .split(/[,.]/)
-    .map(x => x.trim())
+    .map(x => normalizeQuantityUnits(x.trim()))
     .filter(Boolean);
 }
 
