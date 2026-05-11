@@ -1199,6 +1199,7 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
     ? (sanitizeAppointmentContent(note.content || '').trim() || String(note.content || '').trim())
     : '';
   const noteTitle = String(note.title || '').trim() || (note.type === 'appointment' ? 'Встреча' : 'Без названия');
+  const appointmentText = [appointmentBody, appointmentFallback].find(Boolean) || 'Текст встречи пуст.';
   return (
     <article className={`note-card ${selected ? 'selected' : ''}`}>
       <button className="note-main" onClick={() => onOpen(note)}>
@@ -1217,7 +1218,7 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
             {note.actionLabel ? <><br /><b>Действие:</b> {note.actionLabel}</> : null}
             {note.placeLabel ? <><br /><b>Место:</b> {note.placeLabel}</> : null}
             {note.codeLabel ? <><br /><b>Код:</b> {note.codeLabel}</> : null}
-            {appointmentBody ? <><br />{appointmentBody}</> : appointmentFallback ? <><br />{appointmentFallback}</> : null}
+            <br />{appointmentText}
           </p>
         ) : (
           !hasDuplicateBody ? <p>{note.content}</p> : null

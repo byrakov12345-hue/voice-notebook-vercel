@@ -270,11 +270,11 @@ p { color: var(--text-soft); line-height: 1.55; }
   overflow: hidden;
 }
 .note-card.selected { border-color: rgba(103, 232, 249, 0.72); box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.12); }
-.note-main { width: 100%; display: grid; gap: 10px; text-align: left; padding: 16px; border: 0; border-radius: 0; background: transparent; }
+.note-main { width: 100%; display: grid; gap: 10px; text-align: left; padding: 16px; border: 0; border-radius: 0; background: transparent; color: #e2e8f0; min-height: 112px; align-content: start; }
 .note-main:hover { transform: none; background: rgba(255, 255, 255, 0.04); }
 .note-top { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
 .note-top span, .note-top small { min-width: 0; overflow-wrap: anywhere; }
-.note-card h3 { margin: 0; font-size: 20px; letter-spacing: -0.03em; }
+.note-card h3 { margin: 0; font-size: 20px; letter-spacing: -0.03em; color: #f8fafc; }
 .note-card p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.48; }
 .note-card ul { margin: 0; padding-left: 18px; color: var(--text-soft); }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px 16px; }
@@ -575,6 +575,7 @@ p { color: var(--text-soft); line-height: 1.55; }
   }
   .note-main { padding: 13px; }
   .note-card h3 { font-size: 18px; }
+  .note-main { min-height: 124px; }
   .actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
