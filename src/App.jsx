@@ -1003,6 +1003,24 @@ function searchNotes(notes, query) {
     .map(x => x.note);
 }
 
+function compactAppointmentBody(note) {
+  const lines = String(note?.content || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return '';
+  const seen = new Set();
+  const actionNorm = normalize(note?.actionLabel || '');
+  const compact = lines.filter(line => {
+    const key = normalize(line);
+    if (!key || seen.has(key)) return false;
+    if (actionNorm && (key === actionNorm || key.endsWith(actionNorm))) return false;
+    seen.add(key);
+    return true;
+  });
+  return compact.join('\n');
+}
+
 function findFolderByText(folders, text) {
   const source = normalize(text);
   return folders.find(folder => source.includes(normalize(folder.name))) || null;
@@ -1176,6 +1194,7 @@ function localAIPlan(text, data, currentNote, activeFolder = '') {
 
 function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy, onDelete, onCall, onMessage, onRestore }) {
   const hasDuplicateBody = normalize(note.title) === normalize(note.content);
+  const appointmentBody = note.type === 'appointment' ? compactAppointmentBody(note) : '';
   return (
     <article className={`note-card ${selected ? 'selected' : ''}`}>
       <button className="note-main" onClick={() => onOpen(note)}>
@@ -1194,7 +1213,7 @@ function NoteCard({ note, selected, displayIndex = null, onOpen, onShare, onCopy
             {note.actionLabel ? <><br /><b>Действие:</b> {note.actionLabel}</> : null}
             {note.placeLabel ? <><br /><b>Место:</b> {note.placeLabel}</> : null}
             {note.codeLabel ? <><br /><b>Код:</b> {note.codeLabel}</> : null}
-            <br />{note.content}
+            {appointmentBody ? <><br />{appointmentBody}</> : null}
           </p>
         ) : (
           !hasDuplicateBody ? <p>{note.content}</p> : null
