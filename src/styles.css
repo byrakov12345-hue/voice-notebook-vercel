@@ -492,7 +492,7 @@ p { color: var(--text-soft); line-height: 1.55; }
   .future-backdrop { opacity: 0.72; }
   .future-workspace {
     display: block;
-    height: 100%;
+    height: auto;
   }
   .left-command-panel,
   .right-ai-panel,
@@ -500,7 +500,7 @@ p { color: var(--text-soft); line-height: 1.55; }
     display: contents;
   }
   .mobile-brand { display: none !important; }
-  .mobile-panel { display: none !important; }
+  .mobile-panel { display: grid !important; }
   .mobile-panel.mobile-active {
     display: grid !important;
     height: auto;
