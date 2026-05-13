@@ -288,6 +288,44 @@ p { color: var(--text-soft); line-height: 1.55; }
   letter-spacing: .06em;
   text-transform: uppercase;
 }
+.records-list { display: grid; gap: 12px; }
+.record-item {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.56));
+}
+.record-item.selected {
+  border-color: rgba(103, 232, 249, 0.72);
+  box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.12);
+}
+.record-main {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  padding: 16px;
+  color: #e2e8f0;
+  min-height: 112px;
+  align-content: start;
+  cursor: pointer;
+}
+.record-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.record-top span, .record-top small { min-width: 0; overflow-wrap: anywhere; }
+.record-main h3 { margin: 0; font-size: 20px; letter-spacing: -0.03em; color: #f8fafc; }
+.record-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.48; }
+.record-actions-label {
+  margin: 0 16px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
 
 .ai-comm-panel { display: grid; gap: 14px; }
 .ai-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -585,6 +623,8 @@ p { color: var(--text-soft); line-height: 1.55; }
   .note-main { padding: 13px; }
   .note-card h3 { font-size: 18px; }
   .note-main { min-height: 124px; }
+  .record-main { padding: 13px; min-height: 124px; }
+  .record-main h3 { font-size: 18px; }
   .actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

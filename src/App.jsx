@@ -779,7 +779,7 @@ function deriveShoppingListTitle(items, text = '') {
 
 function isShoppingAppendCommand(text) {
   const source = normalize(text);
-  if (includesAny(source, ['добавь к', 'добавь в', 'добавь еще в', 'добавь ещё в', 'допиши к', 'докинь в', 'впиши в', 'внеси в'])) return true;
+  if (includesAny(source, ['добавь к', 'добавить к', 'добавь в', 'добавить в', 'добавь еще в', 'добавь ещё в', 'добавить еще в', 'добавить ещё в', 'допиши к', 'докинь в', 'впиши в', 'внеси в'])) return true;
   return includesAny(source, ['добавь', 'добавить', 'допиши', 'дописать', 'докинь', 'впиши', 'внеси', 'еще', 'ещё', 'плюс']) && inferType(text) === 'shopping_list';
 }
 
@@ -962,7 +962,7 @@ function detectIntent(text) {
   if (includesAny(source, ['переименуй', 'назови запись как'])) return 'rename';
   if (includesAny(source, ['перемести это в', 'перенеси это в', 'перемести запись в', 'перенеси запись в'])) return 'move';
   if (includesAny(source, ['измени последнюю запись', 'открой последнюю запись для изменения'])) return 'edit';
-  if (includesAny(source, ['добавь туда', 'добавь ещё туда', 'добавь еще туда', 'добавь в запись', 'добавь в список', 'допиши туда', 'впиши туда', 'внеси туда'])) return 'append';
+  if (includesAny(source, ['добавь туда', 'добавить туда', 'добавь ещё туда', 'добавь еще туда', 'добавь в запись', 'добавить в запись', 'добавь в список', 'добавить в список', 'добавь к', 'добавить к', 'добавь в', 'добавить в', 'допиши туда', 'впиши туда', 'внеси туда'])) return 'append';
   if (includesAny(source, ['скопируй', 'копируй', 'скопировать', 'в буфер', 'в буфер обмена'])) return 'copy';
   if (includesAny(source, ['поделись', 'поделиться', 'отправь', 'скинь'])) return 'share';
   if (includesAny(source, ['прочитай', 'зачитай', 'озвучь', 'продиктуй'])) return 'read';
@@ -1856,7 +1856,7 @@ export default function App() {
     const addition = String(content || '').trim();
     if (!addition) return setStatusVoice('Не понял, что добавить.', false);
     if (selectedNote.type === 'shopping_list') {
-      const items = extractItems(`купить ${addition}`);
+      const items = extractShoppingAppendItems(addition);
       return appendToLatestShoppingList(selectedNote.folder, items, addition);
     }
     updateNoteById(selectedNote.id, note => ({
@@ -3438,7 +3438,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
                 </div>
               </div>
             ) : null}
-            <div className="note-list">
+            <div className="note-list records-list">
               {visibleNotes.length ? visibleNotes.map((note, index) => {
                 const compactText = note.type === 'shopping_list'
                   ? (note.items || []).join(', ')
@@ -3448,9 +3448,9 @@ function findLatestCompatibleShoppingList(folderName, items) {
                       ? `Когда: ${[note.dateLabel, note.time].filter(Boolean).join(', ') || 'не указано'}\n${sanitizeAppointmentContent(note.content || '') || note.content || ''}`
                       : (note.content || '');
                 return (
-                  <article key={note.id} className={`note-card plain-note-card ${selectedId === note.id ? 'selected' : ''}`}>
+                  <article key={note.id} className={`record-item ${selectedId === note.id ? 'selected' : ''}`}>
                     <div
-                      className="note-main"
+                      className="record-main"
                       role="button"
                       tabIndex={0}
                       onClick={() => openNote(note)}
@@ -3461,14 +3461,14 @@ function findLatestCompatibleShoppingList(folderName, items) {
                         }
                       }}
                     >
-                      <div className="note-top">
+                      <div className="record-top">
                         <span>{index + 1}. {note.folder} · {TYPE_LABELS[note.type] || 'Запись'}</span>
                         <small>{formatDate(note.createdAt)}</small>
                       </div>
                       <h3>{index + 1}. {note.title || 'Без названия'}</h3>
-                      <p>{compactText || 'Текст записи пуст.'}</p>
+                      <p className="record-text">{compactText || 'Текст записи пуст.'}</p>
                     </div>
-                    <div className="note-actions-label">Действия записи</div>
+                    <div className="record-actions-label">Действия записи</div>
                     <div className="actions note-actions">
                       <button type="button" onClick={() => copyNote(note)}>Копировать</button>
                       <button type="button" onClick={() => shareNote(note)}>Поделиться</button>
