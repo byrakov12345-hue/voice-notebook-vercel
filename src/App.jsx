@@ -1951,8 +1951,12 @@ export default function App() {
   }
 
   function changeSelectedReminderTime(targetNote = selectedNote) {
-    if (!targetNote || targetNote.type !== 'appointment') {
-      setStatusVoice('Откройте запись встречи для изменения времени.', false);
+    if (!targetNote) {
+      setStatusVoice('Сначала откройте запись.', false);
+      return;
+    }
+    if (targetNote.type !== 'appointment') {
+      setStatusVoice('У выбранной записи нет времени встречи.', false);
       return;
     }
     const raw = window.prompt('Новое время (например 18:30 или в 6 вечера):', targetNote.time || '18:00');
@@ -3423,17 +3427,15 @@ function findLatestCompatibleShoppingList(folderName, items) {
                 <div>
                   <button type="button" onClick={() => copyNote(activeSelectedNote)}>Копировать</button>
                   <button type="button" onClick={() => shareNote(activeSelectedNote)}>Поделиться</button>
-                  {activeSelectedNote.type === 'appointment' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedId !== activeSelectedNote.id) setSelectedId(activeSelectedNote.id);
-                        changeSelectedReminderTime(activeSelectedNote);
-                      }}
-                    >
-                      Поменять время
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedId !== activeSelectedNote.id) setSelectedId(activeSelectedNote.id);
+                      changeSelectedReminderTime(activeSelectedNote);
+                    }}
+                  >
+                    Поменять время
+                  </button>
                   <button type="button" className="danger" onClick={() => deleteNoteNow(activeSelectedNote)}>Удалить</button>
                 </div>
               </div>
@@ -3467,13 +3469,6 @@ function findLatestCompatibleShoppingList(folderName, items) {
                       </div>
                       <h3>{index + 1}. {note.title || 'Без названия'}</h3>
                       <p className="record-text">{compactText || 'Текст записи пуст.'}</p>
-                    </div>
-                    <div className="record-actions-label">Действия записи</div>
-                    <div className="actions note-actions">
-                      <button type="button" onClick={() => copyNote(note)}>Копировать</button>
-                      <button type="button" onClick={() => shareNote(note)}>Поделиться</button>
-                      <button type="button" onClick={() => editNoteNow(note)}>Редактировать</button>
-                      <button type="button" className="danger" onClick={() => deleteNoteNow(note)}>Удалить</button>
                     </div>
                   </article>
                 );
