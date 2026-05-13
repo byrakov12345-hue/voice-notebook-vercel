@@ -3514,20 +3514,6 @@ function findLatestCompatibleShoppingList(folderName, items) {
               <input value={command} onChange={e => setCommand(e.target.value)} placeholder="Напишите команду" />
               <button type="submit" className="primary">Выполнить</button>
             </form>
-            <div className="quick-date-strip">
-              <button type="button" className={!quickDateFilter ? 'active' : ''} onClick={() => showQuickDate('')}>Все даты</button>
-              {quickDateStrip.map(item => (
-                <button
-                  type="button"
-                  key={item.key}
-                  className={quickDateFilter === item.isoDay ? 'active' : ''}
-                  onClick={() => showQuickDate(item.isoDay)}
-                >
-                  <span>{item.day}</span>
-                  <small>{item.label}</small>
-                </button>
-              ))}
-            </div>
           </section>
 
           {calendarOpen ? (
