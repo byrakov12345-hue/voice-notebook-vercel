@@ -653,9 +653,13 @@ function chooseFolder(text) {
   const explicit = extractExplicitFolder(text);
   if (explicit) return explicit;
   const source = normalize(text);
+  const fastHint = fastFolderAndTypeHint(source);
+  if (fastHint?.folder) return fastHint.folder;
   if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'Идеи';
   if (isFamilyContext(source)) return 'Семья';
-  if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'Расходы';
+  if (includesAny(source, ['адрес', 'улиц', 'ул ', 'проспект', 'дом ', 'квартира', 'подъезд', 'корпус'])) return 'Адрес';
+  if (includesAny(source, ['потратил', 'потратила', 'расход', 'трата', 'трат', 'евро', 'рубл', 'доллар', '₽'])) return 'Финансы';
+  if (includesAny(source, ['заработал', 'получил', 'доход', 'прибыль', 'пришли деньги', 'пришел перевод'])) return 'Финансы';
   if (includesAny(source, ['финанс', 'банк', 'карта', 'счет', 'счёт', 'платеж', 'платёж', 'кредит', 'ипотека'])) return 'Финансы';
   if (includesAny(source, ['документ', 'паспорт', 'права', 'договор', 'полис', 'справка'])) return 'Документы';
   if (includesAny(source, ['поездка', 'путешествие', 'билет', 'отель', 'аэропорт', 'виза'])) return 'Путешествия';
@@ -683,16 +687,32 @@ function chooseFolder(text) {
 
 function inferType(text) {
   const source = normalize(text);
+  const fastHint = fastFolderAndTypeHint(source);
+  if (fastHint?.type) return fastHint.type;
   if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'idea';
   if (includesAny(source, ['телефон', 'номер телефона', 'контакт'])) return 'contact';
   if (includesAny(source, ['комбинац', 'код', 'цифр', 'пароль'])) return 'code';
-  if (includesAny(source, ['потратил', 'потратила', 'расход', 'евро', 'рубл'])) return 'expense';
-  if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'shopping_list';
+  if (includesAny(source, ['потратил', 'потратила', 'расход', 'трата', 'трат', 'евро', 'рубл', 'доллар', '₽'])) return 'expense';
+  if (includesAny(source, ['заработал', 'получил', 'доход', 'прибыль', 'пришли деньги', 'пришел перевод'])) return 'income';
+  if (includesAny(source, ['купить', 'купи', 'покуп', 'магазин', 'продукт', 'аптек', 'лекар', 'таблет', 'анальгин', 'стекло', 'лобов'])) return 'shopping_list';
+  if (includesAny(source, ['адрес', 'улиц', 'ул ', 'проспект', 'дом ', 'квартира', 'подъезд', 'корпус'])) return 'note';
   if (includesAny(source, ['клиент']) && includesAny(source, ['просил', 'нужно', 'надо', 'позвонить', 'написать', 'связаться', 'перезвонить'])) return 'task';
   if (isFamilyContext(source) && (includesAny(source, ['нужно', 'надо', 'сказать', 'напомнить']) || hasDateOrTime(source))) return 'task';
   if (includesAny(source, ['стриж', 'прием', 'приём', 'встреч', 'встрет', 'барбер', 'парикмахер', 'договорились']) || hasDateOrTime(source)) return 'appointment';
   if (includesAny(source, ['задача', 'надо', 'нужно', 'сделать'])) return 'task';
   return 'note';
+}
+
+function fastFolderAndTypeHint(text) {
+  const source = normalize(text);
+  const words = source.split(' ').filter(Boolean);
+  const joined = ` ${words.join(' ')} `;
+  const has = token => joined.includes(` ${token} `) || words.some(word => word.startsWith(token));
+  if (has('адрес') || has('улиц') || has('проспект') || has('подъезд') || has('корпус')) return { folder: 'Адрес', type: 'note' };
+  if (has('потрат') || has('расход') || has('заработ') || has('доход') || has('прибыл')) return { folder: 'Финансы', type: has('заработ') || has('доход') ? 'income' : 'expense' };
+  if (has('купи') || has('купить') || has('покуп') || has('аптек') || has('лекар') || has('таблет')) return { folder: 'Покупки', type: 'shopping_list' };
+  if (has('встрет') || has('прием') || has('стриж')) return { folder: 'Встречи', type: 'appointment' };
+  return null;
 }
 
 function isTimedShoppingCommand(text) {
@@ -892,6 +912,20 @@ function createNoteFromLocalText(text, preferredFolder = '', reminderDefaults = 
     };
   }
 
+  if (type === 'expense' || type === 'income') {
+    const label = type === 'expense' ? 'Расход' : 'Доход';
+    return {
+      id: uid('note'),
+      type: 'note',
+      folder: 'Финансы',
+      title: cleanTitle(`${label}: ${content}`, label),
+      content: `${label}: ${content}`,
+      tags: [label.toLowerCase(), 'финансы', ...tags].filter(Boolean),
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
   return {
     id: uid('note'), type, folder, title: cleanTitle(content, TYPE_LABELS[type] || 'Заметка'), content,
     tags, createdAt: now, updatedAt: now, status: type === 'task' ? 'active' : undefined
@@ -978,6 +1012,7 @@ function detectIntent(text) {
   if (includesAny(source, ['мне нужно', 'мне надо', 'надо', 'нужно', 'хочу'])) return 'save';
   if (inferType(text) !== 'note') return 'save';
   if (hasDateOrTime(source) || includesAny(source, ['на стрижку', 'к врачу', 'на прием', 'на приём', 'встреча', 'встретиться', 'встретится'])) return 'save';
+  if (source.split(' ').filter(Boolean).length >= 2) return 'save';
   return 'unknown';
 }
 
@@ -1857,7 +1892,7 @@ export default function App() {
     if (!addition) return setStatusVoice('Не понял, что добавить.', false);
     if (selectedNote.type === 'shopping_list') {
       const items = extractShoppingAppendItems(addition);
-      return appendToLatestShoppingList(selectedNote.folder, items, addition);
+      return appendToLatestShoppingList(selectedNote.folder, items, addition, true);
     }
     updateNoteById(selectedNote.id, note => ({
       ...note,
@@ -2033,9 +2068,15 @@ function findLatestCompatibleShoppingList(folderName, items) {
     }) || null;
   }
 
-  function appendToLatestShoppingList(folderName, items, rawText = '') {
+  function appendToLatestShoppingList(folderName, items, rawText = '', forceLatest = false) {
     if (!folderName || !items?.length) return false;
-    const latestList = findLatestCompatibleShoppingList(folderName, items);
+    const latestByFolder = name => [...data.notes]
+      .filter(note => note.folder === name && (note.type === 'shopping_list' || note.type === 'appointment'))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
+
+    const latestList = forceLatest
+      ? (latestByFolder(folderName) || (folderName !== 'Покупки' ? latestByFolder('Покупки') : null))
+      : (findLatestCompatibleShoppingList(folderName, items) || (folderName !== 'Покупки' ? findLatestCompatibleShoppingList('Покупки', items) : null));
     if (!latestList) return false;
 
     const latestItems = Array.isArray(latestList.items) && latestList.items.length
@@ -2061,7 +2102,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
         : note)
     }));
     setSelectedId(latestList.id);
-    setSelectedFolder(folderName);
+    setSelectedFolder(latestList.folder || folderName);
     setSuggestedFolder('');
     setStatusVoice(`Добавлено в список ${mergedTitle}.`, false);
     return true;
@@ -2786,8 +2827,8 @@ function findLatestCompatibleShoppingList(folderName, items) {
     }
     const reminderDefaults = buildReminderDefaults(reminderSettings);
     if (plan.action === 'save_shopping_list' && isShoppingAppendCommand(originalText)) {
-      const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
-      if (appendToLatestShoppingList(plan.folder || resolveSaveFolder(originalText, 'shopping_list', preferredFolder), appendItems, originalText)) return true;
+      const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractShoppingAppendItems(plan.content || originalText);
+      if (appendToLatestShoppingList(plan.folder || resolveSaveFolder(originalText, 'shopping_list', preferredFolder), appendItems, originalText, true)) return true;
     }
     if (plan.action === 'save_shopping_list' && !isTimedShoppingCommand(originalText)) {
       const appendItems = Array.isArray(plan.items) && plan.items.length ? plan.items : extractItems(plan.content || originalText);
@@ -2976,7 +3017,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
 
       if (isShoppingAppendCommand(spoken)) {
         const items = extractShoppingAppendItems(spoken);
-        if (items.length && appendToLatestShoppingList('Покупки', items, spoken)) {
+        if (items.length && appendToLatestShoppingList('Покупки', items, spoken, true)) {
           lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
           return;
         }
@@ -3008,7 +3049,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
         if (isShoppingAppendCommand(spoken)) {
           const targetFolder = resolveSaveFolder(spoken, 'shopping_list', preferredFolder);
           const items = extractShoppingAppendItems(spoken);
-          if (appendToLatestShoppingList(targetFolder, items, spoken)) {
+          if (appendToLatestShoppingList(targetFolder, items, spoken, true)) {
             lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
             return;
           }
