@@ -649,12 +649,37 @@ function resolveFolderName(text, type = 'note') {
   return novel || chosen;
 }
 
+function detectFinanceIntent(text) {
+  const source = normalize(text);
+  if (!source) return '';
+  if (includesAny(source, [
+    'отдал долг', 'вернул долг', 'погасил долг', 'погасила долг',
+    'отдал', 'отдала', 'вернул', 'вернула', 'погасил', 'погасила'
+  ])) return 'debt_repay';
+  if (includesAny(source, [
+    'занял', 'заняла', 'одолжил у', 'одолжила у', 'взял в долг', 'взяла в долг',
+    'долг у', 'должен', 'должна'
+  ])) return 'debt_borrow';
+  if (includesAny(source, [
+    'заработал', 'заработала', 'получил', 'получила', 'доход', 'прибыль',
+    'пришли деньги', 'пришел перевод', 'пришла зарплата', 'зарплата', 'аванс',
+    'кэшбек', 'кешбек', 'кэшбэк', 'кешбэк', 'пополнение'
+  ])) return 'income';
+  if (includesAny(source, [
+    'потратил', 'потратила', 'расход', 'трата', 'трат', 'заплатил', 'заплатила',
+    'списали', 'списалось', 'ушло на', 'обошлось', 'купил', 'купила', 'оплатил', 'оплатила',
+    'евро', 'рубл', 'доллар', '₽'
+  ])) return 'expense';
+  return '';
+}
+
 function chooseFolder(text) {
   const explicit = extractExplicitFolder(text);
   if (explicit) return explicit;
   const source = normalize(text);
   const fastHint = fastFolderAndTypeHint(source);
   if (fastHint?.folder) return fastHint.folder;
+  if (detectFinanceIntent(source)) return 'Финансы';
   if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'Идеи';
   if (isFamilyContext(source)) return 'Семья';
   if (includesAny(source, ['адрес', 'улиц', 'ул ', 'проспект', 'дом ', 'квартира', 'подъезд', 'корпус'])) return 'Адрес';
@@ -690,6 +715,10 @@ function inferType(text) {
   const source = normalize(text);
   const fastHint = fastFolderAndTypeHint(source);
   if (fastHint?.type) return fastHint.type;
+  const financeIntent = detectFinanceIntent(source);
+  if (financeIntent === 'expense') return 'expense';
+  if (financeIntent === 'income') return 'income';
+  if (financeIntent === 'debt_borrow' || financeIntent === 'debt_repay') return 'note';
   if (includesAny(source, ['идея', 'идею', 'у меня идея', 'есть идея', 'придумал', 'придумала'])) return 'idea';
   if (includesAny(source, ['телефон', 'номер телефона', 'контакт'])) return 'contact';
   if (includesAny(source, ['комбинац', 'код', 'цифр', 'пароль'])) return 'code';
@@ -711,7 +740,10 @@ function fastFolderAndTypeHint(text) {
   const joined = ` ${words.join(' ')} `;
   const has = token => joined.includes(` ${token} `) || words.some(word => word.startsWith(token));
   if (has('адрес') || has('улиц') || has('проспект') || has('подъезд') || has('корпус')) return { folder: 'Адрес', type: 'note' };
-  if (has('потрат') || has('расход') || has('заработ') || has('доход') || has('прибыл')) return { folder: 'Финансы', type: has('заработ') || has('доход') ? 'income' : 'expense' };
+  if (has('потрат') || has('расход') || has('заработ') || has('доход') || has('прибыл') || has('зарплат') || has('аванс') || has('занял') || has('долг') || has('вернул') || has('отдал')) {
+    const intent = detectFinanceIntent(source);
+    return { folder: 'Финансы', type: intent === 'income' ? 'income' : intent === 'expense' ? 'expense' : 'note' };
+  }
   if (has('купи') || has('купить') || has('покуп') || has('аптек') || has('лекар') || has('таблет')) return { folder: 'Покупки', type: 'shopping_list' };
   if (has('встрет') || has('встреч') || has('прием') || has('стриж')) return { folder: 'Встречи', type: 'appointment' };
   return null;
@@ -814,7 +846,10 @@ function detectFinanceContinuationType(text, selectedNote, notes = []) {
   const source = normalize(text);
   const shortContinuation = startsWithAny(source, ['еще ', 'ещё ', 'плюс ']) || /^добавь\s+еще\b/i.test(source);
   if (!shortContinuation) return '';
-  const financeHint = includesAny(source, ['сумм', 'руб', 'р ', 'р.', '₽', 'тыс', 'доллар', 'евро']) || /\d/.test(source);
+  const financeHint =
+    detectFinanceIntent(source) ||
+    includesAny(source, ['сумм', 'руб', 'р ', 'р.', '₽', 'тыс', 'тыщ', 'доллар', 'евро']) ||
+    /\d/.test(source);
   if (!financeHint) return '';
 
   const selectedFinance = selectedNote && normalize(selectedNote.folder) === normalize('Финансы') ? selectedNote : null;
@@ -1116,6 +1151,29 @@ function extractFinanceAmount(note) {
     .replace(/\s+/g, ' ')
     .trim();
   if (!raw) return 0;
+
+  const simpleWordNumbers = {
+    ноль: 0, один: 1, одна: 1, одну: 1, два: 2, две: 2, три: 3, четыре: 4, пять: 5,
+    шесть: 6, семь: 7, восемь: 8, девять: 9, десять: 10, одиннадцать: 11, двенадцать: 12,
+    тринадцать: 13, четырнадцать: 14, пятнадцать: 15, шестнадцать: 16, семнадцать: 17,
+    восемнадцать: 18, девятнадцать: 19, двадцать: 20, тридцать: 30, сорок: 40,
+    пятьдесят: 50, шестьдесят: 60, семьдесят: 70, восемьдесят: 80, девяносто: 90,
+    сто: 100
+  };
+
+  const wordMatch = raw.match(/\b(ноль|один|одна|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать|шестнадцать|семнадцать|восемнадцать|девятнадцать|двадцать|тридцать|сорок|пятьдесят|шестьдесят|семьдесят|восемьдесят|девяносто|сто)(?:\s+(один|одна|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять))?\b/);
+  if (wordMatch && /\b(тыс|тыщ|тысяч|тысячи|руб|рубл|₽|доллар|евро|к)\b/.test(raw)) {
+    const first = simpleWordNumbers[wordMatch[1]] ?? 0;
+    const second = simpleWordNumbers[wordMatch[2]] ?? 0;
+    let wordBase = first + second;
+    if (!wordBase && wordMatch[1] === 'сто') wordBase = 100;
+    if (wordBase) {
+      if (/\b(млн|миллион)/.test(raw)) return wordBase * 1000000;
+      if (/\b(тыс|тыщ|тысяч|тысячи)\b/.test(raw)) return wordBase * 1000;
+      if (/\bк\b/.test(raw)) return wordBase * 1000;
+      return wordBase;
+    }
+  }
 
   const numberMatch = raw.match(/(\d{1,3}(?:[ .]\d{3})+|\d+(?:[.,]\d+)?|\d+)/);
   if (!numberMatch) return 0;
