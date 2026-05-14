@@ -34,6 +34,13 @@ const CATEGORY_RULES = [
   }
 ];
 
+const CONTEXT_HINTS = [
+  { title: 'Авто', signals: ['для машины', 'для авто', 'в машину', 'на машину', 'для автомобиля'] },
+  { title: 'Аптека', signals: ['в аптеку', 'для аптеки', 'из аптеки', 'для здоровья', 'от простуды'] },
+  { title: 'Инструмент', signals: ['для ремонта', 'для инструмента', 'в мастерскую', 'для шуруповерта', 'для шуруповёрта'] },
+  { title: 'Еда', signals: ['к чаю', 'кофе', 'на завтрак', 'на ужин', 'поесть', 'перекус'] }
+];
+
 function normalizeRuleText(text) {
   return String(text || '').toLowerCase().replace(/ё/g, 'е').trim();
 }
@@ -46,10 +53,16 @@ export function detectShoppingCategoryTitle(text, context = '') {
     const matched = CATEGORY_RULES.find(rule => rule.signals.some(signal => source.includes(signal)));
     return matched ? matched.title : '';
   };
+  const detectContextHint = (source) => {
+    if (!source) return '';
+    const hits = CONTEXT_HINTS.filter(rule => rule.signals.some(signal => source.includes(signal)));
+    if (hits.length !== 1) return '';
+    return hits[0].title;
+  };
 
   const byItem = matchCategory(itemSource);
   if (byItem) return byItem;
-  const byContext = matchCategory(contextSource);
+  const byContext = detectContextHint(contextSource);
   if (byContext) return byContext;
   return 'Покупки';
 }
