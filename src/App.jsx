@@ -3218,6 +3218,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
 
   function selectMobilePanel(panel) {
     setMobilePanel(panel);
+    if (panel === 'notes') setSelectedFolder('Все');
     if (panel === 'calendar') setCalendarOpen(true);
     if (panel === 'settings') setSettingsOpen(true);
   }
