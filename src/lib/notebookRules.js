@@ -5,7 +5,7 @@ const CATEGORY_RULES = [
       'инструмент', 'бит', 'диск', 'болгар', 'шуруповерт', 'шуруповёрт', 'дрел',
       'сверл', 'отвертк', 'молот', 'ключ', 'перфорат', 'пленк', 'плёнк', 'саморез',
       'гвозд', 'рулетк', 'ножовк', 'бензопил', 'лобзик', 'стамеск', 'шпател', 'изолент',
-      'герметик', 'монтаж', 'ремонт'
+      'герметик', 'монтаж', 'ремонт', 'пил'
     ]
   },
   {
@@ -19,8 +19,12 @@ const CATEGORY_RULES = [
     title: 'Авто',
     signals: [
       'машин', 'авто', 'лобов', 'стекл', 'шина', 'фильтр', 'дворник', 'антифриз',
-      'аккум', 'аккумулятор', 'тормозн', 'свеч', 'омывател', 'моторн'
+      'аккум', 'аккумулятор', 'тормозн', 'свеч', 'омывател', 'моторн', 'масло моторное'
     ]
+  },
+  {
+    title: 'Транспорт',
+    signals: ['велосипед', 'самокат', 'скутер', 'мотоцикл', 'мопед', 'камера для колеса', 'цепь']
   },
   {
     title: 'Еда',
@@ -33,7 +37,7 @@ const CATEGORY_RULES = [
   },
   {
     title: 'Дом',
-    signals: ['ламп', 'моющ', 'порош', 'губк', 'посуда', 'полотен', 'бумаг', 'дом', 'квартир']
+    signals: ['ламп', 'моющ', 'порош', 'губк', 'посуда', 'полотен', 'бумаг', 'дом', 'квартир', 'кресл', 'диван', 'стул']
   },
   {
     title: 'Техника',
@@ -105,7 +109,7 @@ export function groupShoppingItemsByCategory(items = [], context = '') {
       groups.get(title).push(item);
     });
 
-  const order = ['Еда', 'Инструмент', 'Аптека', 'Авто', 'Дом', 'Техника', 'Покупки'];
+  const order = ['Еда', 'Инструмент', 'Аптека', 'Авто', 'Транспорт', 'Дом', 'Техника', 'Покупки'];
   return [...groups.entries()]
     .map(([title, values]) => ({ title, items: [...new Set(values)] }))
     .sort((a, b) => {
@@ -115,6 +119,18 @@ export function groupShoppingItemsByCategory(items = [], context = '') {
       const bv = bi === -1 ? 999 : bi;
       return av - bv || a.title.localeCompare(b.title);
     });
+}
+
+export function mapShoppingCategoryToFolder(categoryTitle = 'Покупки') {
+  const title = normalizeRuleText(categoryTitle);
+  if (title === normalizeRuleText('Еда')) return 'Покупки';
+  if (title === normalizeRuleText('Инструмент')) return 'Инструмент';
+  if (title === normalizeRuleText('Аптека')) return 'Здоровье';
+  if (title === normalizeRuleText('Авто')) return 'Машина';
+  if (title === normalizeRuleText('Транспорт')) return 'Транспорт';
+  if (title === normalizeRuleText('Дом')) return 'Дом';
+  if (title === normalizeRuleText('Техника')) return 'Техника';
+  return 'Покупки';
 }
 
 export function isLikelyGroceryItem(text) {

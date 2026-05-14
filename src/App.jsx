@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { detectShoppingCategoryTitle, groupShoppingItemsByCategory, isLikelyGroceryItem, isLikelyGroceryList, shouldAppendShoppingList } from './lib/notebookRules';
+import { detectShoppingCategoryTitle, groupShoppingItemsByCategory, isLikelyGroceryItem, isLikelyGroceryList, mapShoppingCategoryToFolder, shouldAppendShoppingList } from './lib/notebookRules';
 import {
   DEDUPE_STOP_WORDS,
   DEFAULT_FOLDERS,
@@ -828,6 +828,12 @@ function deriveShoppingListTitle(items, text = '') {
   const firstMeaningful = normalizedItems[0];
   if (firstMeaningful) return capitalize(firstMeaningful);
   return 'Покупки';
+}
+
+function resolveShoppingTargetFolder(baseFolder = '', categoryTitle = 'Покупки') {
+  const folder = String(baseFolder || '').trim();
+  if (folder && normalize(folder) !== normalize('Покупки')) return folder;
+  return mapShoppingCategoryToFolder(categoryTitle || 'Покупки');
 }
 
 function isShoppingAppendCommand(text) {
@@ -2187,6 +2193,7 @@ export default function App() {
           ...noteToSave,
           id: uid('note'),
           title: group.title || 'Покупки',
+          folder: resolveShoppingTargetFolder(noteToSave.folder, group.title || 'Покупки'),
           items: group.items,
           content: group.items.join(', '),
           tags: [...new Set(['покупки', 'магазин', (group.title || '').toLowerCase(), ...group.items])],
@@ -2195,7 +2202,7 @@ export default function App() {
         }));
         setData(prev => ({
           ...prev,
-          folders: ensureFolder(prev.folders, noteToSave.folder),
+          folders: splitNotes.reduce((acc, item) => ensureFolder(acc, item.folder), prev.folders),
           notes: [...splitNotes, ...prev.notes]
         }));
         lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
@@ -2205,8 +2212,8 @@ export default function App() {
         setSuggestedFolder('');
         setStatusVoice(
           showAfterSave
-            ? `Сохранено и показано: ${splitNotes.map(x => x.title).join(', ')}.`
-            : `Сохранено в папку ${noteToSave.folder}: ${splitNotes.map(x => x.title).join(', ')}.`,
+            ? `Сохранено и показано: ${splitNotes.map(x => `${x.title} → ${x.folder}`).join(', ')}.`
+            : `Разложено по папкам: ${splitNotes.map(x => `${x.title} → ${x.folder}`).join(', ')}.`,
           false
         );
         return true;
@@ -2215,9 +2222,15 @@ export default function App() {
         noteToSave = {
           ...noteToSave,
           title: groups[0].title,
+          folder: resolveShoppingTargetFolder(noteToSave.folder, groups[0].title),
           items: groups[0].items,
           content: groups[0].items.join(', '),
           tags: [...new Set(['покупки', 'магазин', groups[0].title.toLowerCase(), ...groups[0].items])]
+        };
+      } else if (groups.length === 1 && groups[0].title) {
+        noteToSave = {
+          ...noteToSave,
+          folder: resolveShoppingTargetFolder(noteToSave.folder, groups[0].title)
         };
       }
     }
@@ -2354,20 +2367,21 @@ function findLatestCompatibleShoppingList(folderName, items) {
     if (!folderName || !items?.length) return false;
     const groupedIncoming = groupShoppingItemsByCategory(items, rawText).filter(group => group.items?.length);
     if (groupedIncoming.length > 1) {
-      const handledTitles = [];
+      const handledTargets = [];
       let handled = false;
       groupedIncoming.forEach(group => {
-        const appended = appendToLatestShoppingList(folderName, group.items, `${rawText} ${group.title}`, false);
+        const targetFolder = resolveShoppingTargetFolder(folderName, group.title || 'Покупки');
+        const appended = appendToLatestShoppingList(targetFolder, group.items, `${rawText} ${group.title}`, false);
         if (appended) {
           handled = true;
-          handledTitles.push(group.title);
+          handledTargets.push(`${group.title || 'Покупки'} → ${targetFolder}`);
           return;
         }
         const now = new Date().toISOString();
         const fallbackNote = {
           id: uid('note'),
           type: 'shopping_list',
-          folder: folderName || 'Покупки',
+          folder: targetFolder || 'Покупки',
           title: group.title || deriveShoppingListTitle(group.items, rawText),
           content: group.items.join(', '),
           items: group.items,
@@ -2378,22 +2392,25 @@ function findLatestCompatibleShoppingList(folderName, items) {
         };
         if (saveNote(fallbackNote, false)) {
           handled = true;
-          handledTitles.push(fallbackNote.title);
+          handledTargets.push(`${fallbackNote.title} → ${fallbackNote.folder}`);
         }
       });
       if (handled) {
-        setStatusVoice(`Разложил по спискам: ${[...new Set(handledTitles)].join(', ')}.`, false);
+        setStatusVoice(`Разложил по папкам: ${[...new Set(handledTargets)].join(', ')}.`, false);
       }
       return handled;
     }
+
+    const mainCategory = groupedIncoming[0]?.title || detectShoppingCategoryTitle(items.join(', '), rawText);
+    const targetFolder = resolveShoppingTargetFolder(folderName, mainCategory);
 
     const latestByFolder = name => [...data.notes]
       .filter(note => note.folder === name && (note.type === 'shopping_list' || note.type === 'appointment'))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
 
     const latestList = forceLatest
-      ? (latestByFolder(folderName) || (folderName !== 'Покупки' ? latestByFolder('Покупки') : null))
-      : (findLatestCompatibleShoppingList(folderName, items) || (folderName !== 'Покупки' ? findLatestCompatibleShoppingList('Покупки', items) : null));
+      ? (latestByFolder(targetFolder) || (targetFolder !== 'Покупки' ? latestByFolder('Покупки') : null))
+      : (findLatestCompatibleShoppingList(targetFolder, items) || (targetFolder !== 'Покупки' ? findLatestCompatibleShoppingList('Покупки', items) : null));
     if (!latestList) return false;
 
     const latestItems = Array.isArray(latestList.items) && latestList.items.length
@@ -2421,7 +2438,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
     setSelectedId(latestList.id);
     setSelectedFolder('Все');
     setSuggestedFolder('');
-    setStatusVoice(`Добавлено в список ${mergedTitle}.`, false);
+    setStatusVoice(`Добавлено в список ${mergedTitle} (папка ${targetFolder}).`, false);
     return true;
   }
 
