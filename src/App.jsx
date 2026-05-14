@@ -1094,6 +1094,54 @@ function findFolderByText(folders, text) {
   return folders.find(folder => source.includes(normalize(folder.name))) || null;
 }
 
+function extractFinanceAmount(note) {
+  const raw = normalize([note?.title || '', note?.content || ''].join(' '))
+    .replace(/,/g, '.')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!raw) return 0;
+
+  const numberMatch = raw.match(/(\d+(?:\.\d+)?)/);
+  if (!numberMatch) return 0;
+  const base = Number(numberMatch[1]);
+  if (!Number.isFinite(base)) return 0;
+
+  if (/\b(млн|миллион)/.test(raw)) return base * 1000000;
+  if (/\b(тыс|тысяч|тысячи)\b/.test(raw)) return base * 1000;
+  if (/\b\d+(?:\.\d+)?\s*к\b/.test(raw)) return base * 1000;
+  return base;
+}
+
+function isExpenseFinanceNote(note) {
+  if (!note || normalize(note.folder || '') !== normalize('Финансы')) return false;
+  const source = normalize([note.title || '', note.content || '', ...(note.tags || [])].join(' '));
+  if (includesAny(source, ['доход', 'заработ', 'прибыл', 'приход'])) return false;
+  return includesAny(source, ['расход', 'потрат', 'трата', 'трат', 'списан']);
+}
+
+function buildFinanceExpenseTotals(notes = [], now = new Date()) {
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart = new Date(todayStart);
+  const weekDay = (todayStart.getDay() + 6) % 7;
+  weekStart.setDate(todayStart.getDate() - weekDay);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+
+  const totals = { day: 0, week: 0, month: 0, year: 0 };
+  notes.forEach(note => {
+    if (!isExpenseFinanceNote(note)) return;
+    const amount = extractFinanceAmount(note);
+    if (!amount) return;
+    const created = new Date(note.createdAt || note.updatedAt || now);
+    if (Number.isNaN(created.getTime())) return;
+    if (created >= todayStart) totals.day += amount;
+    if (created >= weekStart) totals.week += amount;
+    if (created >= monthStart) totals.month += amount;
+    if (created >= yearStart) totals.year += amount;
+  });
+  return totals;
+}
+
 function extractFolderListIndex(text) {
   const source = normalize(text);
   const match = source.match(/(?:спис(?:ок|ка)|запис(?:ь|и|ку)|заметк(?:у|и|а)?|номер)\s+(\d{1,3})/i);
@@ -1749,6 +1797,7 @@ export default function App() {
     if (query.trim()) list = searchNotes(list, query);
     return list;
   }, [data.notes, selectedFolder, query, historyFilter, quickDateFilter]);
+  const financeExpenseTotals = useMemo(() => buildFinanceExpenseTotals(data.notes), [data.notes]);
   const calendarMonths = useMemo(() => buildCalendarMonths(data.notes), [data.notes]);
   const selectedCalendarDayNotes = useMemo(() => notesForCalendarDateByDate(data.notes, calendarSelectedDate), [data.notes, calendarSelectedDate]);
   const filteredCalendarDayNotes = useMemo(() => {
@@ -1798,6 +1847,8 @@ export default function App() {
   );
   const activeSelectedNote = selectedNote || visibleNotes[0] || null;
   const activeSelectedIndex = activeSelectedNote ? visibleNotes.findIndex(note => note.id === activeSelectedNote.id) : -1;
+
+  const formatMoney = value => `${Math.round(Number(value) || 0).toLocaleString('ru-RU')} ₽`;
 
   function setStatusVoice(text, voice = true) {
     setStatus(text);
@@ -3469,6 +3520,17 @@ function findLatestCompatibleShoppingList(folderName, items) {
                           ) : null}
                         </div>
                       )) : <div className="folder-note-empty">В этой папке пока нет записей</div>}
+                      {folder.name === 'Финансы' ? (
+                        <div className="finance-summary">
+                          <strong>Итог трат</strong>
+                          <div className="finance-summary-grid">
+                            <div><span>День</span><b>{formatMoney(financeExpenseTotals.day)}</b></div>
+                            <div><span>Неделя</span><b>{formatMoney(financeExpenseTotals.week)}</b></div>
+                            <div><span>Месяц</span><b>{formatMoney(financeExpenseTotals.month)}</b></div>
+                            <div><span>Год</span><b>{formatMoney(financeExpenseTotals.year)}</b></div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -3573,6 +3635,17 @@ function findLatestCompatibleShoppingList(folderName, items) {
                 );
               }) : <div className="empty">Записей пока нет. Нажмите «Говорить» или введите команду.</div>}
             </div>
+            {selectedFolder === 'Финансы' ? (
+              <div className="finance-summary">
+                <strong>Итог трат</strong>
+                <div className="finance-summary-grid">
+                  <div><span>День</span><b>{formatMoney(financeExpenseTotals.day)}</b></div>
+                  <div><span>Неделя</span><b>{formatMoney(financeExpenseTotals.week)}</b></div>
+                  <div><span>Месяц</span><b>{formatMoney(financeExpenseTotals.month)}</b></div>
+                  <div><span>Год</span><b>{formatMoney(financeExpenseTotals.year)}</b></div>
+                </div>
+              </div>
+            ) : null}
           </section>
         </main>
 
