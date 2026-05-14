@@ -1982,7 +1982,7 @@ export default function App() {
     });
     if (duplicateDetected) {
       if (duplicateNote?.id) setSelectedId(duplicateNote.id);
-      setSelectedFolder(duplicateNote?.folder || note.folder);
+      setSelectedFolder('Все');
       setSuggestedFolder('');
       lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
       setStatusVoice(`Такая запись уже есть в папке ${duplicateNote?.folder || note.folder}.`, false);
@@ -1990,7 +1990,7 @@ export default function App() {
     }
     lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
     setSelectedId(note.id);
-    setSelectedFolder(note.folder);
+    setSelectedFolder('Все');
     if (showAfterSave) setMobilePanel('notes');
     setSuggestedFolder('');
     setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
@@ -2115,7 +2115,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
         : note)
     }));
     setSelectedId(latestList.id);
-    setSelectedFolder(latestList.folder || folderName);
+    setSelectedFolder('Все');
     setSuggestedFolder('');
     setStatusVoice(`Добавлено в список ${mergedTitle}.`, false);
     return true;
@@ -2124,7 +2124,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
   function openNote(note) {
     setMobilePanel('notes');
     setSelectedId(note.id);
-    setSelectedFolder(note.folder);
+    setSelectedFolder('Все');
     if (note.type === 'appointment' && note.eventAt) loadNoteIntoCalendar(note);
     setStatusVoice(`Открыта запись: ${note.title}.`, false);
   }
@@ -2153,7 +2153,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
     const latest = notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
     if (!latest) return setStatusVoice('Пока нет подходящих записей.');
     setSelectedId(latest.id);
-    setSelectedFolder(latest.folder);
+    setSelectedFolder('Все');
     setQuery('');
     setStatusVoice(`Показываю последнюю запись: ${latest.title}.`);
   }
