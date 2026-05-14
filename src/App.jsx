@@ -1504,6 +1504,7 @@ export default function App() {
   const [installPromptDismissed, setInstallPromptDismissed] = useState(() => {
     try { return localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY) === '1'; } catch { return false; }
   });
+  const [iosInstallGuideOpen, setIosInstallGuideOpen] = useState(false);
   const [isInstalled, setIsInstalled] = useState(() => {
     if (typeof window === 'undefined') return false;
     return Boolean(window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone);
@@ -1570,6 +1571,11 @@ export default function App() {
     const touchMac = platform.includes('mac') && Number(window.navigator.maxTouchPoints || 0) > 1;
     return /iphone|ipad|ipod/.test(ua) || touchMac;
   }, []);
+  const isIOSSafariBrowser = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const ua = String(window.navigator.userAgent || '').toLowerCase();
+    return isIOSDevice && ua.includes('safari') && !/(crios|fxios|edgios|opios|yaapp_ios|yabrowser|duckduckgo)/.test(ua);
+  }, [isIOSDevice]);
   const isIosStandalone = useMemo(() => {
     if (typeof window === 'undefined') return false;
     return Boolean(window.navigator.standalone);
@@ -3573,7 +3579,13 @@ function findLatestCompatibleShoppingList(folderName, items) {
       return;
     }
     if (iosNeedsManualInstall) {
-      setStatusVoice('iPhone/iPad: откройте сайт в Safari, нажмите «Поделиться», затем «На экран Домой».', false);
+      setIosInstallGuideOpen(true);
+      if (!isIOSSafariBrowser) {
+        tryOpenInSafariForInstall();
+        setStatusVoice('Для установки на iPhone открыл Safari. Если не открылось: скопируйте ссылку и откройте её в Safari вручную.', false);
+        return;
+      }
+      setStatusVoice('iPhone/iPad: в Safari нажмите «Поделиться» и выберите «На экран Домой».', false);
       return;
     }
     if (installPromptEvent?.prompt) {
@@ -3595,6 +3607,36 @@ function findLatestCompatibleShoppingList(folderName, items) {
   function dismissInstallCard() {
     setInstallPromptDismissed(true);
     try { localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, '1'); } catch {}
+  }
+
+  function tryOpenInSafariForInstall() {
+    if (typeof window === 'undefined' || !isIOSDevice) return false;
+    const href = String(window.location.href || '');
+    if (!href) return false;
+    const target = href.startsWith('https://')
+      ? `x-safari-https://${href.slice('https://'.length)}`
+      : href.startsWith('http://')
+        ? `x-safari-http://${href.slice('http://'.length)}`
+        : href;
+    try {
+      window.location.href = target;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function copyInstallLink() {
+    const href = typeof window !== 'undefined' ? String(window.location.href || '') : '';
+    if (!href) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(href);
+        setStatusVoice('Ссылка скопирована. Откройте её в Safari и выберите «На экран Домой».', false);
+        return;
+      }
+    } catch {}
+    setStatusVoice(`Откройте ссылку в Safari: ${href}`, false);
   }
 
   function selectMobilePanel(panel) {
@@ -3859,6 +3901,20 @@ function findLatestCompatibleShoppingList(folderName, items) {
                 <button type="button" className="primary" onClick={promptInstallApp}>
                   {iosNeedsManualInstall ? 'Как установить на iPhone' : 'Установить'}
                 </button>
+                {iosNeedsManualInstall && iosInstallGuideOpen ? (
+                  <div className="folder-note-empty" style={{ marginTop: 8 }}>
+                    {isIOSSafariBrowser
+                      ? 'Шаги: 1) Поделиться 2) На экран Домой 3) Добавить.'
+                      : 'Сейчас открыт не Safari. Нажмите «Открыть в Safari», затем «Поделиться» -> «На экран Домой».'
+                    }
+                    <div className="reminder-input-row" style={{ marginTop: 8 }}>
+                      {!isIOSSafariBrowser ? (
+                        <button type="button" onClick={tryOpenInSafariForInstall}>Открыть в Safari</button>
+                      ) : null}
+                      <button type="button" onClick={copyInstallLink}>Скопировать ссылку</button>
+                    </div>
+                  </div>
+                ) : null}
                 <button type="button" onClick={dismissInstallCard} aria-label="Скрыть">×</button>
               </div>
             ) : null}
