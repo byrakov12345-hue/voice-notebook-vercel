@@ -800,6 +800,7 @@ function deriveShoppingListTitle(items, text = '') {
 function isShoppingAppendCommand(text) {
   const source = normalize(text);
   if (includesAny(source, ['добавь к', 'добавить к', 'добавь в', 'добавить в', 'добавь еще в', 'добавь ещё в', 'добавить еще в', 'добавить ещё в', 'допиши к', 'докинь в', 'впиши в', 'внеси в'])) return true;
+  if (startsWithAny(source, ['еще ', 'ещё ', 'плюс ']) && source.split(' ').filter(Boolean).length <= 6) return true;
   return includesAny(source, ['добавь', 'добавить', 'допиши', 'дописать', 'докинь', 'впиши', 'внеси', 'еще', 'ещё', 'плюс']) && inferType(text) === 'shopping_list';
 }
 
@@ -807,6 +808,8 @@ function extractShoppingAppendItems(text) {
   const base = String(text || '')
     .replace(/\s+и\s+(оповещ|уведомл|напоминан).*/i, '')
     .replace(/^(добавь|добавить|допиши|дописать|докинь|впиши|внеси)\s+/i, '')
+    .replace(/^(еще|ещё|плюс)\s+/i, '')
+    .replace(/^(?:в|к)\s+спис(?:ок|ку)\s+/i, '')
     .replace(/^к\s+[а-яa-z0-9-]+\s*/i, '')
     .trim();
   return extractItems(base)
