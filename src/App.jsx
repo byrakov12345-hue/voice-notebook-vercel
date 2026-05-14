@@ -660,6 +660,7 @@ function chooseFolder(text) {
   if (includesAny(source, ['адрес', 'улиц', 'ул ', 'проспект', 'дом ', 'квартира', 'подъезд', 'корпус'])) return 'Адрес';
   if (includesAny(source, ['потратил', 'потратила', 'расход', 'трата', 'трат', 'евро', 'рубл', 'доллар', '₽'])) return 'Финансы';
   if (includesAny(source, ['заработал', 'получил', 'доход', 'прибыль', 'пришли деньги', 'пришел перевод'])) return 'Финансы';
+  if (includesAny(source, ['долг', 'занял', 'заняла', 'одолжил', 'одолжила', 'отдал', 'отдала', 'вернул', 'вернула', 'погасил', 'погасила'])) return 'Финансы';
   if (includesAny(source, ['финанс', 'банк', 'карта', 'счет', 'счёт', 'платеж', 'платёж', 'кредит', 'ипотека'])) return 'Финансы';
   if (includesAny(source, ['документ', 'паспорт', 'права', 'договор', 'полис', 'справка'])) return 'Документы';
   if (includesAny(source, ['поездка', 'путешествие', 'билет', 'отель', 'аэропорт', 'виза'])) return 'Путешествия';
@@ -694,6 +695,7 @@ function inferType(text) {
   if (includesAny(source, ['комбинац', 'код', 'цифр', 'пароль'])) return 'code';
   if (includesAny(source, ['потратил', 'потратила', 'расход', 'трата', 'трат', 'евро', 'рубл', 'доллар', '₽'])) return 'expense';
   if (includesAny(source, ['заработал', 'получил', 'доход', 'прибыль', 'пришли деньги', 'пришел перевод'])) return 'income';
+  if (includesAny(source, ['долг', 'занял', 'заняла', 'одолжил', 'одолжила', 'отдал', 'отдала', 'вернул', 'вернула', 'погасил', 'погасила'])) return 'note';
   if (includesAny(source, ['купить', 'купи', 'покуп', 'магазин', 'продукт', 'аптек', 'лекар', 'таблет', 'анальгин', 'стекло', 'лобов'])) return 'shopping_list';
   if (includesAny(source, ['адрес', 'улиц', 'ул ', 'проспект', 'дом ', 'квартира', 'подъезд', 'корпус'])) return 'note';
   if (includesAny(source, ['клиент']) && includesAny(source, ['просил', 'нужно', 'надо', 'позвонить', 'написать', 'связаться', 'перезвонить'])) return 'task';
@@ -970,7 +972,7 @@ function createNoteFromAI(plan, fallbackText, preferredFolder = '', reminderDefa
   const now = new Date().toISOString();
   const actionMap = {
     save_idea: 'idea', save_task: 'task', save_appointment: 'appointment', save_shopping_list: 'shopping_list',
-    save_contact: 'contact', save_code: 'code', save_note: 'note', save_expense: 'expense'
+    save_contact: 'contact', save_code: 'code', save_note: 'note', save_expense: 'expense', save_income: 'income'
   };
   const type = plan.type && plan.type !== 'unknown' ? plan.type : (actionMap[plan.action] || inferType(fallbackText));
 
@@ -1015,6 +1017,21 @@ function createNoteFromAI(plan, fallbackText, preferredFolder = '', reminderDefa
       placeLabel: plan.placeLabel || appointmentMeta.place,
       codeLabel: plan.codeLabel || appointmentMeta.code,
       tags: ['встреча', ...(plan.tags || [])],
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  if (type === 'expense' || type === 'income') {
+    const label = type === 'expense' ? 'Расход' : 'Доход';
+    const rawContent = String(plan.content || fallbackText || '').trim();
+    return {
+      id: uid('note'),
+      type: 'note',
+      folder: 'Финансы',
+      title: cleanTitle(`${label}: ${rawContent}`, label),
+      content: `${label}: ${rawContent}`,
+      tags: [label.toLowerCase(), 'финансы', ...(plan.tags || [])].filter(Boolean),
       createdAt: now,
       updatedAt: now
     };
@@ -1096,18 +1113,24 @@ function findFolderByText(folders, text) {
 
 function extractFinanceAmount(note) {
   const raw = normalize([note?.title || '', note?.content || ''].join(' '))
-    .replace(/,/g, '.')
     .replace(/\s+/g, ' ')
     .trim();
   if (!raw) return 0;
 
-  const numberMatch = raw.match(/(\d+(?:\.\d+)?)/);
+  const numberMatch = raw.match(/(\d{1,3}(?:[ .]\d{3})+|\d+(?:[.,]\d+)?|\d+)/);
   if (!numberMatch) return 0;
-  const base = Number(numberMatch[1]);
+  const token = String(numberMatch[1] || '').trim();
+  let normalizedNumber = token;
+  if (/^\d{1,3}(?:[ .]\d{3})+$/.test(token)) {
+    normalizedNumber = token.replace(/[ .]/g, '');
+  } else {
+    normalizedNumber = token.replace(',', '.');
+  }
+  const base = Number(normalizedNumber);
   if (!Number.isFinite(base)) return 0;
 
   if (/\b(млн|миллион)/.test(raw)) return base * 1000000;
-  if (/\b(тыс|тысяч|тысячи)\b/.test(raw)) return base * 1000;
+  if (/\b(тыс|тыщ|тысяч|тысячи)\b/.test(raw)) return base * 1000;
   if (/\b\d+(?:\.\d+)?\s*к\b/.test(raw)) return base * 1000;
   return base;
 }
@@ -1119,7 +1142,23 @@ function isExpenseFinanceNote(note) {
   return includesAny(source, ['расход', 'потрат', 'трата', 'трат', 'списан']);
 }
 
-function buildFinanceExpenseTotals(notes = [], now = new Date()) {
+function isDebtBorrowFinanceNote(note) {
+  if (!note || normalize(note.folder || '') !== normalize('Финансы')) return false;
+  const source = normalize([note.title || '', note.content || '', ...(note.tags || [])].join(' '));
+  return includesAny(source, ['занял', 'заняла', 'одолжил у', 'одолжила у', 'в долг у', 'взял в долг', 'взяла в долг']);
+}
+
+function isDebtRepayFinanceNote(note) {
+  if (!note || normalize(note.folder || '') !== normalize('Финансы')) return false;
+  const source = normalize([note.title || '', note.content || '', ...(note.tags || [])].join(' '));
+  return includesAny(source, ['отдал', 'отдала', 'вернул', 'вернула', 'погасил', 'погасила', 'закрыл долг', 'погасил долг']);
+}
+
+function isFinanceTransactionalNote(note) {
+  return isExpenseFinanceNote(note) || isDebtBorrowFinanceNote(note) || isDebtRepayFinanceNote(note);
+}
+
+function buildFinanceStats(notes = [], now = new Date()) {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart = new Date(todayStart);
   const weekDay = (todayStart.getDay() + 6) % 7;
@@ -1127,11 +1166,21 @@ function buildFinanceExpenseTotals(notes = [], now = new Date()) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const yearStart = new Date(now.getFullYear(), 0, 1);
 
-  const totals = { day: 0, week: 0, month: 0, year: 0 };
+  const totals = { day: 0, week: 0, month: 0, year: 0, debtBorrowed: 0, debtRepaid: 0, debtBalance: 0 };
   notes.forEach(note => {
-    if (!isExpenseFinanceNote(note)) return;
     const amount = extractFinanceAmount(note);
     if (!amount) return;
+    if (isDebtBorrowFinanceNote(note)) {
+      totals.debtBorrowed += amount;
+      totals.debtBalance += amount;
+      return;
+    }
+    if (isDebtRepayFinanceNote(note)) {
+      totals.debtRepaid += amount;
+      totals.debtBalance -= amount;
+      return;
+    }
+    if (!isExpenseFinanceNote(note)) return;
     const created = new Date(note.createdAt || note.updatedAt || now);
     if (Number.isNaN(created.getTime())) return;
     if (created >= todayStart) totals.day += amount;
@@ -1295,6 +1344,18 @@ function localAIPlan(text, data, currentNote, activeFolder = '') {
     }
     if (type === 'code') {
       return { action: 'save_code', type, folder: resolveSaveFolder(text, type, activeFolder), title: 'Комбинация цифр', content: extractDigits(content) || content, tags: ['код', 'комбинация', 'цифры'], showAfterSave };
+    }
+    if (type === 'expense' || type === 'income') {
+      const label = type === 'expense' ? 'Расход' : 'Доход';
+      return {
+        action: type === 'expense' ? 'save_expense' : 'save_income',
+        type,
+        folder: 'Финансы',
+        title: cleanTitle(`${label}: ${content}`, label),
+        content,
+        tags: [label.toLowerCase(), 'финансы'],
+        showAfterSave
+      };
     }
   if (type === 'appointment') {
     const appointmentTime = extractAppointmentTime(text);
@@ -1797,7 +1858,7 @@ export default function App() {
     if (query.trim()) list = searchNotes(list, query);
     return list;
   }, [data.notes, selectedFolder, query, historyFilter, quickDateFilter]);
-  const financeExpenseTotals = useMemo(() => buildFinanceExpenseTotals(data.notes), [data.notes]);
+  const financeStats = useMemo(() => buildFinanceStats(data.notes), [data.notes]);
   const calendarMonths = useMemo(() => buildCalendarMonths(data.notes), [data.notes]);
   const selectedCalendarDayNotes = useMemo(() => notesForCalendarDateByDate(data.notes, calendarSelectedDate), [data.notes, calendarSelectedDate]);
   const filteredCalendarDayNotes = useMemo(() => {
@@ -2048,7 +2109,9 @@ export default function App() {
       const nowTs = Date.now();
       duplicateNote = prev.notes.find(existing => {
         const createdAt = new Date(existing.createdAt || existing.updatedAt || nowTs).getTime();
-        return nowTs - createdAt < dedupeWindowMs && isSameOrNearDuplicate(existing, note);
+        if (nowTs - createdAt >= dedupeWindowMs) return false;
+        if (isFinanceTransactionalNote(existing) || isFinanceTransactionalNote(note)) return false;
+        return isSameOrNearDuplicate(existing, note);
       });
       if (duplicateNote) {
         duplicateDetected = true;
@@ -3524,10 +3587,17 @@ function findLatestCompatibleShoppingList(folderName, items) {
                         <div className="finance-summary">
                           <strong>Итог трат</strong>
                           <div className="finance-summary-grid">
-                            <div><span>День</span><b>{formatMoney(financeExpenseTotals.day)}</b></div>
-                            <div><span>Неделя</span><b>{formatMoney(financeExpenseTotals.week)}</b></div>
-                            <div><span>Месяц</span><b>{formatMoney(financeExpenseTotals.month)}</b></div>
-                            <div><span>Год</span><b>{formatMoney(financeExpenseTotals.year)}</b></div>
+                            <div><span>День</span><b>{formatMoney(financeStats.day)}</b></div>
+                            <div><span>Неделя</span><b>{formatMoney(financeStats.week)}</b></div>
+                            <div><span>Месяц</span><b>{formatMoney(financeStats.month)}</b></div>
+                            <div><span>Год</span><b>{formatMoney(financeStats.year)}</b></div>
+                          </div>
+                          <strong>Долги</strong>
+                          <div className="finance-summary-grid">
+                            <div><span>Занял</span><b>{formatMoney(financeStats.debtBorrowed)}</b></div>
+                            <div><span>Отдал</span><b>{formatMoney(financeStats.debtRepaid)}</b></div>
+                            <div><span>Текущий долг</span><b>{formatMoney(Math.max(financeStats.debtBalance, 0))}</b></div>
+                            <div><span>Переплата</span><b>{formatMoney(Math.max(-financeStats.debtBalance, 0))}</b></div>
                           </div>
                         </div>
                       ) : null}
@@ -3639,10 +3709,17 @@ function findLatestCompatibleShoppingList(folderName, items) {
               <div className="finance-summary">
                 <strong>Итог трат</strong>
                 <div className="finance-summary-grid">
-                  <div><span>День</span><b>{formatMoney(financeExpenseTotals.day)}</b></div>
-                  <div><span>Неделя</span><b>{formatMoney(financeExpenseTotals.week)}</b></div>
-                  <div><span>Месяц</span><b>{formatMoney(financeExpenseTotals.month)}</b></div>
-                  <div><span>Год</span><b>{formatMoney(financeExpenseTotals.year)}</b></div>
+                  <div><span>День</span><b>{formatMoney(financeStats.day)}</b></div>
+                  <div><span>Неделя</span><b>{formatMoney(financeStats.week)}</b></div>
+                  <div><span>Месяц</span><b>{formatMoney(financeStats.month)}</b></div>
+                  <div><span>Год</span><b>{formatMoney(financeStats.year)}</b></div>
+                </div>
+                <strong>Долги</strong>
+                <div className="finance-summary-grid">
+                  <div><span>Занял</span><b>{formatMoney(financeStats.debtBorrowed)}</b></div>
+                  <div><span>Отдал</span><b>{formatMoney(financeStats.debtRepaid)}</b></div>
+                  <div><span>Текущий долг</span><b>{formatMoney(Math.max(financeStats.debtBalance, 0))}</b></div>
+                  <div><span>Переплата</span><b>{formatMoney(Math.max(-financeStats.debtBalance, 0))}</b></div>
                 </div>
               </div>
             ) : null}
