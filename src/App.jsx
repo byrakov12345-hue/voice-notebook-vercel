@@ -3585,7 +3585,7 @@ function findLatestCompatibleShoppingList(folderName, items) {
         setStatusVoice('Для установки на iPhone открыл Safari. Если не открылось: скопируйте ссылку и откройте её в Safari вручную.', false);
         return;
       }
-      setStatusVoice('iPhone/iPad: в Safari нажмите «Поделиться» и выберите «На экран Домой».', false);
+      setStatusVoice('iPhone/iPad: нажмите внизу иконку «Поделиться» (квадрат со стрелкой) -> «На экран Домой» -> «Добавить».', false);
       return;
     }
     if (installPromptEvent?.prompt) {
@@ -4026,8 +4026,14 @@ function findLatestCompatibleShoppingList(folderName, items) {
             </button>
             {!isInstalled ? (
               <button type="button" className="tool-button install-inline-button" onClick={promptInstallApp}>
-                Установить приложение
+                {iosNeedsManualInstall ? 'Установить на iPhone' : 'Установить приложение'}
               </button>
+            ) : null}
+            {!isInstalled && iosNeedsManualInstall ? (
+              <div className="reminder-input-row" style={{ marginTop: 8 }}>
+                {!isIOSSafariBrowser ? <button type="button" className="tool-button" onClick={tryOpenInSafariForInstall}>Открыть в Safari</button> : null}
+                <button type="button" className="tool-button" onClick={copyInstallLink}>Скопировать ссылку</button>
+              </div>
             ) : null}
             <div className="status-card">
               <span>Статус</span>
