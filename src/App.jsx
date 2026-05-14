@@ -1552,6 +1552,9 @@ export default function App() {
   });
   const useAI = true;
   const recognitionRef = useRef(null);
+  const speechBufferRef = useRef('');
+  const speechSilenceTimerRef = useRef(null);
+  const speechSessionRef = useRef({ id: 0, processed: false });
   const lastCommandRef = useRef({ text: '', at: 0 });
   const lastHandledCommandRef = useRef({ text: '', at: 0 });
   const processingCommandRef = useRef(false);
@@ -3397,22 +3400,81 @@ function findLatestCompatibleShoppingList(folderName, items) {
     }
   }
 
+  function clearSpeechSilenceTimer() {
+    if (speechSilenceTimerRef.current) {
+      clearTimeout(speechSilenceTimerRef.current);
+      speechSilenceTimerRef.current = null;
+    }
+  }
+
+  function processSpeechBuffer(sessionId) {
+    if (speechSessionRef.current.id !== sessionId) return;
+    const transcript = String(speechBufferRef.current || '').trim();
+    if (!transcript || speechSessionRef.current.processed) return;
+    speechSessionRef.current.processed = true;
+    processCommand(transcript);
+  }
+
   function startListening() {
     if (!speechSupported) return setStatusVoice('Браузер не поддерживает распознавание речи. Попробуйте Chrome на Android.');
+    if (listening) return;
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
+
+    const sessionId = speechSessionRef.current.id + 1;
+    speechSessionRef.current = { id: sessionId, processed: false };
+    speechBufferRef.current = '';
+    clearSpeechSilenceTimer();
+
     recognition.lang = 'ru-RU';
-    recognition.interimResults = false;
-    recognition.continuous = false;
-    recognition.onstart = () => { setListening(true); setStatus('Слушаю...'); };
-    recognition.onresult = e => processCommand(e.results?.[0]?.[0]?.transcript || '');
-    recognition.onerror = () => { setListening(false); setStatusVoice('Не получилось распознать голос. Проверьте микрофон.'); };
-    recognition.onend = () => setListening(false);
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      setListening(true);
+      setStatus('Слушаю... Можно говорить медленно, с паузами.');
+    };
+    recognition.onresult = e => {
+      if (speechSessionRef.current.id !== sessionId) return;
+      const finalChunks = [];
+      for (let i = e.resultIndex; i < e.results.length; i += 1) {
+        const chunk = String(e.results?.[i]?.[0]?.transcript || '').trim();
+        if (!chunk) continue;
+        if (e.results[i].isFinal) finalChunks.push(chunk);
+      }
+      if (finalChunks.length) {
+        const nextText = `${speechBufferRef.current} ${finalChunks.join(' ')}`.replace(/\s+/g, ' ').trim();
+        speechBufferRef.current = nextText;
+      }
+      clearSpeechSilenceTimer();
+      speechSilenceTimerRef.current = setTimeout(() => {
+        processSpeechBuffer(sessionId);
+        recognitionRef.current?.stop();
+      }, 4500);
+    };
+    recognition.onerror = e => {
+      clearSpeechSilenceTimer();
+      setListening(false);
+      const err = String(e?.error || '');
+      if (err === 'no-speech') {
+        setStatusVoice('Не услышал речь. Говорите чуть медленнее или ближе к микрофону.');
+        return;
+      }
+      setStatusVoice('Не получилось распознать голос. Проверьте микрофон.');
+    };
+    recognition.onend = () => {
+      clearSpeechSilenceTimer();
+      processSpeechBuffer(sessionId);
+      setListening(false);
+    };
     recognition.start();
   }
 
   function stopListening() {
+    const sessionId = speechSessionRef.current.id;
+    clearSpeechSilenceTimer();
     recognitionRef.current?.stop();
+    processSpeechBuffer(sessionId);
     setListening(false);
   }
 
