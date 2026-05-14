@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { isLikelyGroceryList, shouldAppendShoppingList } from './lib/notebookRules';
+import { isLikelyGroceryItem, isLikelyGroceryList, shouldAppendShoppingList } from './lib/notebookRules';
 import {
   DEDUPE_STOP_WORDS,
   DEFAULT_FOLDERS,
@@ -800,9 +800,38 @@ function deriveShoppingListTitle(items, text = '') {
 function isShoppingAppendCommand(text) {
   const source = normalize(text);
   if (includesAny(source, ['добавь к', 'добавить к', 'добавь в', 'добавить в', 'добавь еще в', 'добавь ещё в', 'добавить еще в', 'добавить ещё в', 'допиши к', 'докинь в', 'впиши в', 'внеси в'])) return true;
-  if (startsWithAny(source, ['еще ', 'ещё ', 'плюс ']) && source.split(' ').filter(Boolean).length <= 6) return true;
+  if (startsWithAny(source, ['еще ', 'ещё ', 'плюс ']) && source.split(' ').filter(Boolean).length <= 6) {
+    const shortPayload = source.replace(/^(еще|ещё|плюс)\s+/i, '').trim();
+    return isLikelyGroceryItem(shortPayload) || includesAny(shortPayload, ['в список', 'к списку', 'покуп']);
+  }
   if (/^к\s+[а-яa-z0-9-]+\s+[а-яa-z0-9-]/i.test(source) && !includesAny(source, ['врач', 'прием', 'приём', 'встреч', 'звон', 'клиент'])) return true;
   return includesAny(source, ['добавь', 'добавить', 'допиши', 'дописать', 'докинь', 'впиши', 'внеси', 'еще', 'ещё', 'плюс']) && inferType(text) === 'shopping_list';
+}
+
+function detectFinanceContinuationType(text, selectedNote, notes = []) {
+  const source = normalize(text);
+  const shortContinuation = startsWithAny(source, ['еще ', 'ещё ', 'плюс ']) || /^добавь\s+еще\b/i.test(source);
+  if (!shortContinuation) return '';
+  const financeHint = includesAny(source, ['сумм', 'руб', 'р ', 'р.', '₽', 'тыс', 'доллар', 'евро']) || /\d/.test(source);
+  if (!financeHint) return '';
+
+  const selectedFinance = selectedNote && normalize(selectedNote.folder) === normalize('Финансы') ? selectedNote : null;
+  const latestFinance = [...notes]
+    .filter(note => normalize(note.folder) === normalize('Финансы'))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
+  const anchor = selectedFinance || latestFinance;
+  if (!anchor) return 'expense';
+  const anchorText = normalize([anchor.title || '', anchor.content || ''].join(' '));
+  if (includesAny(anchorText, ['доход', 'заработ', 'прибыл'])) return 'income';
+  return 'expense';
+}
+
+function buildFinanceContinuationText(text, type = 'expense') {
+  const source = String(text || '')
+    .replace(/^(еще|ещё|плюс|добавь еще|добавь ещё)\s+/i, '')
+    .trim();
+  const cleaned = source || String(text || '').trim();
+  return type === 'income' ? `заработал ${cleaned}` : `потратил ${cleaned}`;
 }
 
 function extractShoppingAppendItems(text) {
@@ -3026,6 +3055,14 @@ function findLatestCompatibleShoppingList(folderName, items) {
         setSuggestedFolder('');
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return setStatusVoice(`Папка ${folderName} создана или уже существует.`);
+      }
+
+      const financeContinuationType = detectFinanceContinuationType(spoken, selectedNote, data.notes);
+      if (financeContinuationType) {
+        const financeText = buildFinanceContinuationText(spoken, financeContinuationType);
+        saveNote(createNoteFromLocalText(financeText, 'Финансы', reminderDefaults), false);
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return;
       }
 
       if (isShoppingAppendCommand(spoken)) {
