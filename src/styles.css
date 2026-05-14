@@ -561,9 +561,10 @@ p { color: var(--text-soft); line-height: 1.55; }
     padding: 14px;
   }
   .notes.mobile-active {
-    grid-template-rows: auto auto auto minmax(0, 1fr);
-    max-height: none;
-    overflow: visible;
+    display: block !important;
+    max-height: calc(100dvh - 104px);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: 104px;
   }
   .folders.mobile-active,
@@ -613,12 +614,11 @@ p { color: var(--text-soft); line-height: 1.55; }
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
-  .note-list {
+  .notes.mobile-active .note-list {
     min-height: 0;
-    overflow: auto;
+    overflow: visible;
     padding-right: 2px;
-    padding-bottom: 96px;
-    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0;
   }
   .note-main { padding: 13px; }
   .note-card h3 { font-size: 18px; }
@@ -752,9 +752,8 @@ p { color: var(--text-soft); line-height: 1.55; }
     padding-bottom: 112px;
   }
   .notes.mobile-active .note-list {
-    overflow: auto;
-    padding-bottom: 112px;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
+    padding-bottom: 0;
   }
   .folder-note-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .folder-note-delete { grid-column: 3; }

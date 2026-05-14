@@ -711,7 +711,7 @@ function fastFolderAndTypeHint(text) {
   if (has('адрес') || has('улиц') || has('проспект') || has('подъезд') || has('корпус')) return { folder: 'Адрес', type: 'note' };
   if (has('потрат') || has('расход') || has('заработ') || has('доход') || has('прибыл')) return { folder: 'Финансы', type: has('заработ') || has('доход') ? 'income' : 'expense' };
   if (has('купи') || has('купить') || has('покуп') || has('аптек') || has('лекар') || has('таблет')) return { folder: 'Покупки', type: 'shopping_list' };
-  if (has('встрет') || has('прием') || has('стриж')) return { folder: 'Встречи', type: 'appointment' };
+  if (has('встрет') || has('встреч') || has('прием') || has('стриж')) return { folder: 'Встречи', type: 'appointment' };
   return null;
 }
 
@@ -801,6 +801,7 @@ function isShoppingAppendCommand(text) {
   const source = normalize(text);
   if (includesAny(source, ['добавь к', 'добавить к', 'добавь в', 'добавить в', 'добавь еще в', 'добавь ещё в', 'добавить еще в', 'добавить ещё в', 'допиши к', 'докинь в', 'впиши в', 'внеси в'])) return true;
   if (startsWithAny(source, ['еще ', 'ещё ', 'плюс ']) && source.split(' ').filter(Boolean).length <= 6) return true;
+  if (/^к\s+[а-яa-z0-9-]+\s+[а-яa-z0-9-]/i.test(source) && !includesAny(source, ['врач', 'прием', 'приём', 'встреч', 'звон', 'клиент'])) return true;
   return includesAny(source, ['добавь', 'добавить', 'допиши', 'дописать', 'докинь', 'впиши', 'внеси', 'еще', 'ещё', 'плюс']) && inferType(text) === 'shopping_list';
 }
 
