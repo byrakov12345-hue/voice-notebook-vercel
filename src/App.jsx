@@ -1561,6 +1561,18 @@ export default function App() {
 
   const selectedNote = data.notes.find(n => n.id === selectedId) || null;
   const speechSupported = Boolean(SpeechRecognition);
+  const isIOSDevice = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const ua = String(window.navigator.userAgent || '').toLowerCase();
+    const platform = String(window.navigator.platform || '').toLowerCase();
+    const touchMac = platform.includes('mac') && Number(window.navigator.maxTouchPoints || 0) > 1;
+    return /iphone|ipad|ipod/.test(ua) || touchMac;
+  }, []);
+  const isIosStandalone = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(window.navigator.standalone);
+  }, []);
+  const iosNeedsManualInstall = isIOSDevice && !isIosStandalone && !isInstalled;
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -3416,6 +3428,10 @@ function findLatestCompatibleShoppingList(folderName, items) {
       setStatusVoice('Приложение уже установлено.', false);
       return;
     }
+    if (iosNeedsManualInstall) {
+      setStatusVoice('iPhone/iPad: откройте сайт в Safari, нажмите «Поделиться», затем «На экран Домой».', false);
+      return;
+    }
     if (installPromptEvent?.prompt) {
       try {
         await installPromptEvent.prompt();
@@ -3690,9 +3706,15 @@ function findLatestCompatibleShoppingList(folderName, items) {
               <div className="install-card">
                 <div>
                   <strong>Установить АИ Блокнот</strong>
-                  <span>Для стабильной фоновой работы и уведомлений.</span>
+                  <span>
+                    {iosNeedsManualInstall
+                      ? 'iPhone/iPad: Safari → Поделиться → На экран Домой.'
+                      : 'Для стабильной фоновой работы и уведомлений.'}
+                  </span>
                 </div>
-                <button type="button" className="primary" onClick={promptInstallApp}>Установить</button>
+                <button type="button" className="primary" onClick={promptInstallApp}>
+                  {iosNeedsManualInstall ? 'Как установить на iPhone' : 'Установить'}
+                </button>
                 <button type="button" onClick={dismissInstallCard} aria-label="Скрыть">×</button>
               </div>
             ) : null}
