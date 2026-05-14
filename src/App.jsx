@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { isLikelyGroceryItem, isLikelyGroceryList, shouldAppendShoppingList } from './lib/notebookRules';
+import { detectShoppingCategoryTitle, groupShoppingItemsByCategory, isLikelyGroceryItem, isLikelyGroceryList, shouldAppendShoppingList } from './lib/notebookRules';
 import {
   DEDUPE_STOP_WORDS,
   DEFAULT_FOLDERS,
@@ -810,24 +810,13 @@ function sanitizeAppointmentContent(text) {
 }
 
 function deriveShoppingListTitle(items, text = '') {
-  const normalizedItems = (items || []).map(item => normalize(item)).filter(Boolean);
-  const source = normalize([text, ...normalizedItems].join(' '));
-
-  const groups = [
-    { title: 'Еда', signals: ['хлеб', 'батон', 'сахар', 'молоко', 'сыр', 'мяс', 'куриц', 'овощ', 'фрукт', 'еда', 'продукт', 'чай', 'кофе', 'круп', 'макарон'] },
-    { title: 'Транспорт', signals: ['мотоцикл', 'велосипед', 'самокат', 'машин', 'авто', 'транспорт', 'скутер'] },
-    { title: 'Запчасти', signals: ['втулк', 'шина', 'колес', 'подшип', 'масл', 'фильтр', 'чехл', 'запчаст', 'свеч'] },
-    { title: 'Дом', signals: ['ламп', 'мебел', 'посуда', 'подушк', 'ремонт', 'дом', 'квартир'] },
-    { title: 'Одежда', signals: ['куртк', 'обув', 'футбол', 'джинс', 'носк', 'штан', 'одежд'] },
-    { title: 'Техника', signals: ['телефон', 'ноутбук', 'планшет', 'кабель', 'зарядк', 'наушник', 'мышк'] },
-    { title: 'Здоровье', signals: ['лекар', 'таблет', 'витамин', 'бинт', 'градусник', 'здоров'] }
-  ];
-
-  const matched = groups.find(group => group.signals.some(signal => source.includes(signal)));
-  if (matched) return matched.title;
-
+  const normalizedItems = (items || []).map(item => String(item || '').trim()).filter(Boolean);
+  const grouped = groupShoppingItemsByCategory(normalizedItems, text);
+  if (grouped.length === 1 && grouped[0]?.title) return grouped[0].title;
+  const detected = detectShoppingCategoryTitle(text, normalizedItems.join(' '));
+  if (detected && detected !== 'Покупки') return detected;
   const firstMeaningful = normalizedItems[0];
-  if (firstMeaningful) return capitalize(firstMeaningful.slice(0, 1).toUpperCase() + firstMeaningful.slice(1));
+  if (firstMeaningful) return capitalize(firstMeaningful);
   return 'Покупки';
 }
 
@@ -2159,32 +2148,80 @@ export default function App() {
   }
 
   function saveNote(note, showAfterSave = false) {
+    let noteToSave = note;
     const dedupeWindowMs = 20000;
-    const incomingSignature = noteSignature(note);
+    const incomingSignature = noteSignature(noteToSave);
     if (
       lastSavedRef.current.signature === incomingSignature &&
       Date.now() - lastSavedRef.current.at < dedupeWindowMs
     ) {
-      setStatusVoice(`Повторная запись ${note.title} пропущена.`, false);
+      setStatusVoice(`Повторная запись ${noteToSave.title} пропущена.`, false);
       return false;
+    }
+
+    if (noteToSave.type === 'shopping_list') {
+      const rawItems = Array.isArray(noteToSave.items) && noteToSave.items.length
+        ? noteToSave.items
+        : extractItems(noteToSave.content || '');
+      const groups = groupShoppingItemsByCategory(rawItems, `${noteToSave.title || ''} ${noteToSave.content || ''}`)
+        .filter(group => Array.isArray(group.items) && group.items.length);
+      if (groups.length > 1) {
+        const now = new Date().toISOString();
+        const splitNotes = groups.map((group, index) => ({
+          ...noteToSave,
+          id: uid('note'),
+          title: group.title || 'Покупки',
+          items: group.items,
+          content: group.items.join(', '),
+          tags: [...new Set(['покупки', 'магазин', (group.title || '').toLowerCase(), ...group.items])],
+          createdAt: index === 0 ? (noteToSave.createdAt || now) : now,
+          updatedAt: now
+        }));
+        setData(prev => ({
+          ...prev,
+          folders: ensureFolder(prev.folders, noteToSave.folder),
+          notes: [...splitNotes, ...prev.notes]
+        }));
+        lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
+        setSelectedId(splitNotes[0].id);
+        setSelectedFolder('Все');
+        if (showAfterSave) setMobilePanel('notes');
+        setSuggestedFolder('');
+        setStatusVoice(
+          showAfterSave
+            ? `Сохранено и показано: ${splitNotes.map(x => x.title).join(', ')}.`
+            : `Сохранено в папку ${noteToSave.folder}: ${splitNotes.map(x => x.title).join(', ')}.`,
+          false
+        );
+        return true;
+      }
+      if (groups.length === 1 && groups[0].title && noteToSave.title !== groups[0].title) {
+        noteToSave = {
+          ...noteToSave,
+          title: groups[0].title,
+          items: groups[0].items,
+          content: groups[0].items.join(', '),
+          tags: [...new Set(['покупки', 'магазин', groups[0].title.toLowerCase(), ...groups[0].items])]
+        };
+      }
     }
 
     let duplicateDetected = false;
     let duplicateNote = null;
     setData(prev => {
-      if (note.type === 'appointment') {
+      if (noteToSave.type === 'appointment') {
         return {
           ...prev,
-          folders: ensureFolder(prev.folders, note.folder),
-          notes: [note, ...prev.notes]
+          folders: ensureFolder(prev.folders, noteToSave.folder),
+          notes: [noteToSave, ...prev.notes]
         };
       }
       const nowTs = Date.now();
       duplicateNote = prev.notes.find(existing => {
         const createdAt = new Date(existing.createdAt || existing.updatedAt || nowTs).getTime();
         if (nowTs - createdAt >= dedupeWindowMs) return false;
-        if (isFinanceTransactionalNote(existing) || isFinanceTransactionalNote(note)) return false;
-        return isSameOrNearDuplicate(existing, note);
+        if (isFinanceTransactionalNote(existing) || isFinanceTransactionalNote(noteToSave)) return false;
+        return isSameOrNearDuplicate(existing, noteToSave);
       });
       if (duplicateNote) {
         duplicateDetected = true;
@@ -2192,8 +2229,8 @@ export default function App() {
       }
       return {
         ...prev,
-        folders: ensureFolder(prev.folders, note.folder),
-        notes: [note, ...prev.notes]
+        folders: ensureFolder(prev.folders, noteToSave.folder),
+        notes: [noteToSave, ...prev.notes]
       };
     });
     if (duplicateDetected) {
@@ -2201,16 +2238,16 @@ export default function App() {
       setSelectedFolder('Все');
       setSuggestedFolder('');
       lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
-      setStatusVoice(`Такая запись уже есть в папке ${duplicateNote?.folder || note.folder}.`, false);
+      setStatusVoice(`Такая запись уже есть в папке ${duplicateNote?.folder || noteToSave.folder}.`, false);
       return false;
     }
     lastSavedRef.current = { signature: incomingSignature, at: Date.now() };
-    setSelectedId(note.id);
+    setSelectedId(noteToSave.id);
     setSelectedFolder('Все');
     if (showAfterSave) setMobilePanel('notes');
     setSuggestedFolder('');
-    setStatusVoice(showAfterSave ? `Сохранено и показано: ${note.title}.` : `Сохранено в папку ${note.folder}.`);
-    ensureReminderReady(note);
+    setStatusVoice(showAfterSave ? `Сохранено и показано: ${noteToSave.title}.` : `Сохранено в папку ${noteToSave.folder}.`);
+    ensureReminderReady(noteToSave);
     return true;
   }
 
@@ -2299,6 +2336,41 @@ function findLatestCompatibleShoppingList(folderName, items) {
 
   function appendToLatestShoppingList(folderName, items, rawText = '', forceLatest = false) {
     if (!folderName || !items?.length) return false;
+    const groupedIncoming = groupShoppingItemsByCategory(items, rawText).filter(group => group.items?.length);
+    if (groupedIncoming.length > 1) {
+      const handledTitles = [];
+      let handled = false;
+      groupedIncoming.forEach(group => {
+        const appended = appendToLatestShoppingList(folderName, group.items, `${rawText} ${group.title}`, false);
+        if (appended) {
+          handled = true;
+          handledTitles.push(group.title);
+          return;
+        }
+        const now = new Date().toISOString();
+        const fallbackNote = {
+          id: uid('note'),
+          type: 'shopping_list',
+          folder: folderName || 'Покупки',
+          title: group.title || deriveShoppingListTitle(group.items, rawText),
+          content: group.items.join(', '),
+          items: group.items,
+          checkedItems: [],
+          tags: [...new Set(['покупки', 'магазин', (group.title || '').toLowerCase(), ...group.items])],
+          createdAt: now,
+          updatedAt: now
+        };
+        if (saveNote(fallbackNote, false)) {
+          handled = true;
+          handledTitles.push(fallbackNote.title);
+        }
+      });
+      if (handled) {
+        setStatusVoice(`Разложил по спискам: ${[...new Set(handledTitles)].join(', ')}.`, false);
+      }
+      return handled;
+    }
+
     const latestByFolder = name => [...data.notes]
       .filter(note => note.folder === name && (note.type === 'shopping_list' || note.type === 'appointment'))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
