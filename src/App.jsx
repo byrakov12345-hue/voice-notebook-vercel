@@ -1074,8 +1074,12 @@ function resolveSaveFolder(text, type = 'note', preferredFolder = '') {
   const explicit = extractExplicitFolder(text);
   if (explicit) return explicit;
   const semanticFolder = resolveFolderName(text, type);
+  const noteSemanticPriorityFolders = new Set(['Адрес', 'Финансы', 'Расходы', 'Доходы', 'Покупки', 'Встречи', 'Контакты', 'Идеи', 'Задачи']);
   // For structured intents, semantic routing must override currently opened folder.
   if (['appointment', 'shopping_list', 'contact', 'code', 'expense', 'income', 'idea'].includes(type)) {
+    return semanticFolder;
+  }
+  if (type === 'note' && noteSemanticPriorityFolders.has(semanticFolder)) {
     return semanticFolder;
   }
   if (preferredFolder && preferredFolder !== 'Все') return preferredFolder;
@@ -3157,6 +3161,13 @@ function findLatestCompatibleShoppingList(folderName, items) {
         setSelectedFolder(name);
         lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
         return setStatusVoice(`Папка ${name} создана или уже существует.`);
+      }
+      if (String(spoken || '').trim()) {
+        lastHandledCommandRef.current = { text: normalizedSpoken, at: Date.now() };
+        return saveNote(
+          createNoteFromLocalText(spoken, preferredFolder, reminderDefaults),
+          includesAny(spoken, ['выведи', 'покажи', 'открой', 'на экран'])
+        );
       }
       setStatusVoice('Я пока не понял команду. Попробуйте сказать: запомни идею, найди заметку, покажи последнюю.');
     } finally {
