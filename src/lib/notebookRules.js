@@ -4,24 +4,31 @@ const CATEGORY_RULES = [
     signals: [
       'инструмент', 'бит', 'диск', 'болгар', 'шуруповерт', 'шуруповёрт', 'дрел',
       'сверл', 'отвертк', 'молот', 'ключ', 'перфорат', 'пленк', 'плёнк', 'саморез',
-      'гвозд', 'рулетк', 'ножовк'
+      'гвозд', 'рулетк', 'ножовк', 'бензопил', 'лобзик', 'стамеск', 'шпател', 'изолент',
+      'герметик', 'монтаж', 'ремонт'
     ]
   },
   {
     title: 'Аптека',
-    signals: ['аптек', 'лекар', 'таблет', 'анальгин', 'ибупрофен', 'парацетамол', 'бинт', 'мазь', 'витамин']
+    signals: [
+      'аптек', 'лекар', 'таблет', 'анальгин', 'ибупрофен', 'парацетамол', 'бинт', 'мазь',
+      'витамин', 'пластыр', 'перекис', 'сироп', 'капл', 'антисептик'
+    ]
   },
   {
     title: 'Авто',
-    signals: ['машин', 'авто', 'лобов', 'стекл', 'шина', 'масл', 'фильтр', 'дворник', 'антифриз', 'аккум']
+    signals: [
+      'машин', 'авто', 'лобов', 'стекл', 'шина', 'фильтр', 'дворник', 'антифриз',
+      'аккум', 'аккумулятор', 'тормозн', 'свеч', 'омывател', 'моторн'
+    ]
   },
   {
     title: 'Еда',
     signals: [
       'хлеб', 'батон', 'чеснок', 'молоко', 'сыр', 'яйц', 'картош', 'лук', 'помидор', 'огур',
-      'яблок', 'банан', 'мяс', 'куриц', 'рыб', 'сахар', 'соль', 'круп', 'макарон', 'пельмен',
+      'яблок', 'банан', 'мяс', 'куриц', 'рыб', 'сахар', 'соль', 'масло', 'круп', 'макарон', 'пельмен',
       'рис', 'греч', 'кефир', 'творог', 'йогурт', 'колбас', 'сосиск', 'чай', 'кофе', 'вода',
-      'сок', 'мука', 'печенье', 'шоколад', 'сладост', 'торт'
+      'сок', 'мука', 'печенье', 'шоколад', 'сладост', 'торт', 'продукт', 'еда'
     ]
   },
   {
@@ -38,11 +45,23 @@ const CONTEXT_HINTS = [
   { title: 'Авто', signals: ['для машины', 'для авто', 'в машину', 'на машину', 'для автомобиля'] },
   { title: 'Аптека', signals: ['в аптеку', 'для аптеки', 'из аптеки', 'для здоровья', 'от простуды'] },
   { title: 'Инструмент', signals: ['для ремонта', 'для инструмента', 'в мастерскую', 'для шуруповерта', 'для шуруповёрта'] },
-  { title: 'Еда', signals: ['к чаю', 'кофе', 'на завтрак', 'на ужин', 'поесть', 'перекус'] }
+  { title: 'Еда', signals: ['к чаю', 'к кофе', 'на завтрак', 'на ужин', 'поесть', 'перекус', 'в магазин за едой'] }
 ];
 
 function normalizeRuleText(text) {
-  return String(text || '').toLowerCase().replace(/ё/g, 'е').trim();
+  return String(text || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[.,;:!?()[\]{}"'`~]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasSignal(source, signal) {
+  if (!source || !signal) return false;
+  if (signal.includes(' ')) return source.includes(signal);
+  const words = source.split(' ').filter(Boolean);
+  return words.some(word => word === signal || word.startsWith(signal));
 }
 
 export function detectShoppingCategoryTitle(text, context = '') {
@@ -50,12 +69,20 @@ export function detectShoppingCategoryTitle(text, context = '') {
   const contextSource = normalizeRuleText(context);
   const matchCategory = (source) => {
     if (!source) return '';
-    const matched = CATEGORY_RULES.find(rule => rule.signals.some(signal => source.includes(signal)));
-    return matched ? matched.title : '';
+    const scored = CATEGORY_RULES
+      .map(rule => ({
+        title: rule.title,
+        score: rule.signals.reduce((sum, signal) => sum + (hasSignal(source, signal) ? 1 : 0), 0)
+      }))
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+    if (!scored.length) return '';
+    if (scored.length > 1 && scored[0].score === scored[1].score) return '';
+    return scored[0].title;
   };
   const detectContextHint = (source) => {
     if (!source) return '';
-    const hits = CONTEXT_HINTS.filter(rule => rule.signals.some(signal => source.includes(signal)));
+    const hits = CONTEXT_HINTS.filter(rule => rule.signals.some(signal => hasSignal(source, signal)));
     if (hits.length !== 1) return '';
     return hits[0].title;
   };

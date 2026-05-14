@@ -696,7 +696,10 @@ function chooseFolder(text) {
   const scoredFolder = scoreFolderSignals(source);
   if (scoredFolder) return scoredFolder;
   if (includesAny(source, ['стриж', 'встреч', 'встрет', 'прием', 'приём', 'барбер', 'парикмахер', 'договорились']) || hasDateOrTime(source)) return 'Встречи';
-  if (includesAny(source, ['купить', 'покуп', 'магазин', 'продукт'])) return 'Покупки';
+  if (includesAny(source, [
+    'купить', 'покуп', 'магазин', 'продукт', 'закуп', 'закупить', 'докупить',
+    'в аптеку', 'для машины', 'для авто', 'для ремонта', 'инструмент', 'запчаст'
+  ])) return 'Покупки';
   if (includesAny(source, ['телефон', 'номер', 'контакт'])) return 'Контакты';
   if (includesAny(source, ['код', 'комбинац', 'цифр', 'пароль'])) return 'Коды и комбинации';
   if (includesAny(source, ['клиент', 'заказчик', 'цена'])) return 'Клиенты';
@@ -725,7 +728,11 @@ function inferType(text) {
   if (includesAny(source, ['потратил', 'потратила', 'расход', 'трата', 'трат', 'евро', 'рубл', 'доллар', '₽'])) return 'expense';
   if (includesAny(source, ['заработал', 'получил', 'доход', 'прибыль', 'пришли деньги', 'пришел перевод'])) return 'income';
   if (includesAny(source, ['долг', 'занял', 'заняла', 'одолжил', 'одолжила', 'отдал', 'отдала', 'вернул', 'вернула', 'погасил', 'погасила'])) return 'note';
-  if (includesAny(source, ['купить', 'купи', 'покуп', 'магазин', 'продукт', 'аптек', 'лекар', 'таблет', 'анальгин', 'стекло', 'лобов'])) return 'shopping_list';
+  if (includesAny(source, [
+    'купить', 'купи', 'покуп', 'магазин', 'продукт', 'закупить', 'докупить',
+    'аптек', 'лекар', 'таблет', 'анальгин', 'стекло', 'лобов', 'инструмент', 'запчаст',
+    'для машины', 'для авто', 'для ремонта'
+  ])) return 'shopping_list';
   if (includesAny(source, ['адрес', 'улиц', 'ул ', 'проспект', 'дом ', 'квартира', 'подъезд', 'корпус'])) return 'note';
   if (includesAny(source, ['клиент']) && includesAny(source, ['просил', 'нужно', 'надо', 'позвонить', 'написать', 'связаться', 'перезвонить'])) return 'task';
   if (isFamilyContext(source) && (includesAny(source, ['нужно', 'надо', 'сказать', 'напомнить']) || hasDateOrTime(source))) return 'task';
@@ -744,7 +751,10 @@ function fastFolderAndTypeHint(text) {
     const intent = detectFinanceIntent(source);
     return { folder: 'Финансы', type: intent === 'income' ? 'income' : intent === 'expense' ? 'expense' : 'note' };
   }
-  if (has('купи') || has('купить') || has('покуп') || has('аптек') || has('лекар') || has('таблет')) return { folder: 'Покупки', type: 'shopping_list' };
+  if (
+    has('купи') || has('купить') || has('покуп') || has('аптек') || has('лекар') ||
+    has('таблет') || has('закуп') || has('инструмент') || has('запчаст') || has('ремонт')
+  ) return { folder: 'Покупки', type: 'shopping_list' };
   if (has('встрет') || has('встреч') || has('прием') || has('стриж')) return { folder: 'Встречи', type: 'appointment' };
   return null;
 }
