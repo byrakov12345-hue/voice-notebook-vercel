@@ -1070,8 +1070,13 @@ function extractFolderListIndex(text) {
 function resolveSaveFolder(text, type = 'note', preferredFolder = '') {
   const explicit = extractExplicitFolder(text);
   if (explicit) return explicit;
+  const semanticFolder = resolveFolderName(text, type);
+  // For structured intents, semantic routing must override currently opened folder.
+  if (['appointment', 'shopping_list', 'contact', 'code', 'expense', 'income', 'idea'].includes(type)) {
+    return semanticFolder;
+  }
   if (preferredFolder && preferredFolder !== 'Все') return preferredFolder;
-  return resolveFolderName(text, type);
+  return semanticFolder;
 }
 
 function extractRenameValue(text) {
