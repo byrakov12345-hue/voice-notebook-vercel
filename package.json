@@ -12,6 +12,7 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "smoke:voice": "node scripts/voice-smoke.mjs",
+    "smoke:shopping": "node scripts/shopping-routing-smoke.mjs",
     "ios:add": "npx cap add ios",
     "ios:sync": "npm run build && npx cap sync ios",
     "ios:open": "npx cap open ios",
