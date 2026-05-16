@@ -1,6 +1,17 @@
 self.__SMART_NOTEBOOK_TIMERS__ = self.__SMART_NOTEBOOK_TIMERS__ || new Map();
 self.__SMART_NOTEBOOK_FIRED__ = self.__SMART_NOTEBOOK_FIRED__ || new Set();
 self.__SMART_NOTEBOOK_INFLIGHT__ = self.__SMART_NOTEBOOK_INFLIGHT__ || new Set();
+const OFFLINE_CACHE_VERSION = 'offline-v1-2026-05-16';
+const OFFLINE_SHELL_CACHE = `smart-notebook-shell-${OFFLINE_CACHE_VERSION}`;
+const OFFLINE_RUNTIME_CACHE = `smart-notebook-runtime-${OFFLINE_CACHE_VERSION}`;
+const OFFLINE_SHELL_URLS = [
+  '/',
+  '/index.html',
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon.svg'
+];
 const REMINDER_DB_NAME = 'smart_voice_notebook_reminders_db_v1';
 const REMINDER_STORE_NAME = 'reminders';
 const REMINDER_KEEP_PAST_MS = 24 * 60 * 60 * 1000;
@@ -179,13 +190,98 @@ async function syncServerReminders(reminders) {
   return { ok: true, status: 'synced', reminders: payload.reminders || 0 };
 }
 
-self.addEventListener('install', () => {
-  self.skipWaiting();
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    self.skipWaiting();
+    const cache = await caches.open(OFFLINE_SHELL_CACHE);
+    await cache.addAll(OFFLINE_SHELL_URLS);
+  })());
+});
+
+async function cleanupOldCaches() {
+  const keep = new Set([OFFLINE_SHELL_CACHE, OFFLINE_RUNTIME_CACHE]);
+  const keys = await caches.keys();
+  await Promise.all(keys
+    .filter(key =>
+      key.startsWith('smart-notebook-shell-')
+      || key.startsWith('smart-notebook-runtime-'))
+    .filter(key => !keep.has(key))
+    .map(key => caches.delete(key)));
+}
+
+async function networkFirstForNavigation(request) {
+  const shellCache = await caches.open(OFFLINE_SHELL_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response && response.ok) {
+      shellCache.put('/index.html', response.clone()).catch(() => {});
+      shellCache.put('/', response.clone()).catch(() => {});
+    }
+    return response;
+  } catch {
+    const cached = await shellCache.match('/index.html') || await shellCache.match('/');
+    if (cached) return cached;
+    throw new Error('offline_navigation_unavailable');
+  }
+}
+
+async function cacheFirstForStatic(request) {
+  const runtimeCache = await caches.open(OFFLINE_RUNTIME_CACHE);
+  const cached = await runtimeCache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response && response.ok) runtimeCache.put(request, response.clone()).catch(() => {});
+  return response;
+}
+
+async function staleWhileRevalidate(request) {
+  const runtimeCache = await caches.open(OFFLINE_RUNTIME_CACHE);
+  const cached = await runtimeCache.match(request);
+  const networkPromise = fetch(request)
+    .then(response => {
+      if (response && response.ok) runtimeCache.put(request, response.clone()).catch(() => {});
+      return response;
+    })
+    .catch(() => null);
+  if (cached) return cached;
+  const network = await networkPromise;
+  if (network) return network;
+  throw new Error('offline_resource_unavailable');
+}
+
+function isStaticAssetRequest(requestUrl, request) {
+  if (request.destination === 'style' || request.destination === 'script' || request.destination === 'font' || request.destination === 'image') return true;
+  return /\.(?:js|css|png|jpg|jpeg|svg|webp|gif|woff2?|ttf|ico)$/i.test(requestUrl.pathname);
+}
+
+function isApiRequest(requestUrl) {
+  return requestUrl.pathname.startsWith('/api/');
+}
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const requestUrl = new URL(request.url);
+  if (requestUrl.origin !== self.location.origin) return;
+  if (isApiRequest(requestUrl)) return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirstForNavigation(request));
+    return;
+  }
+
+  if (isStaticAssetRequest(requestUrl, request)) {
+    event.respondWith(cacheFirstForStatic(request));
+    return;
+  }
+
+  event.respondWith(staleWhileRevalidate(request));
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(Promise.all([
     self.clients.claim(),
+    cleanupOldCaches().catch(() => {}),
     restoreStoredReminders().catch(() => {})
   ]));
 });
